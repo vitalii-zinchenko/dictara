@@ -4,10 +4,10 @@ use std::time::SystemTime;
 use serde::Serialize;
 use tauri::Emitter;
 
-#[derive(Clone, Serialize)]
-struct FnKeyEvent {
-    pressed: bool,
-    timestamp: u128,
+#[derive(Clone, Serialize, serde::Deserialize)]
+pub struct FnKeyEvent {
+    pub pressed: bool,
+    pub timestamp: u128,
 }
 
 #[derive(Clone, Serialize)]

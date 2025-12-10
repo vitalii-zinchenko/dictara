@@ -24,4 +24,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rdev = { git = "https://github.com/fufesou/rdev" }
 macos-accessibility-client = "0.0.1"
+cpal = "0.15"
+hound = "3.5"
 
