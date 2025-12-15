@@ -10,12 +10,26 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
         "title": "typefree",
         "width": 800,
         "height": 600,
         "visible": true
+      },
+      {
+        "label": "recording-popup",
+        "title": "Recording",
+        "width": 100,
+        "height": 100,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "resizable": false,
+        "visible": true,
+        "url": "recording-popup",
+        "shadow": false
       }
     ],
     "security": {

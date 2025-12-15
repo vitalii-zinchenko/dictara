@@ -1,0 +1,33 @@
+:root {
+  background-color: transparent !important;
+}
+
+body, html, #root {
+  margin: 0;
+  padding: 0;
+  background-color: transparent !important;
+  overflow: hidden;
+}
+
+.popup-container {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: transparent;
+  font-family: system-ui, -apple-system, sans-serif;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.popup-content {
+  width: 100%;
+  height: 100%;
+  background-color: red;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}

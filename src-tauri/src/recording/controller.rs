@@ -1,6 +1,6 @@
 use serde::Serialize;
 use std::path::PathBuf;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use tokio::sync::mpsc::Receiver;
 
 use crate::clients::openai::OpenAIClient;
@@ -100,6 +100,13 @@ impl Controller {
             eprintln!("[Controller] Failed to set recording icon: {}", e);
         }
 
+        // Show recording popup window
+        if let Some(window) = self.app_handle.get_webview_window("recording-popup") {
+            if let Err(e) = window.show() {
+                eprintln!("[Controller] Failed to show recording popup: {}", e);
+            }
+        }
+
         self.app_handle.emit("recording-started", ())?;
 
         let recording = self.audio_recorder.start()?;
@@ -122,6 +129,13 @@ impl Controller {
         // Restore tray icon to default state
         if let Err(e) = crate::ui::tray::set_default_icon(&self.app_handle) {
             eprintln!("[Controller] Failed to set default icon: {}", e);
+        }
+
+        // Hide recording popup window
+        if let Some(window) = self.app_handle.get_webview_window("recording-popup") {
+            if let Err(e) = window.hide() {
+                eprintln!("[Controller] Failed to hide recording popup: {}", e);
+            }
         }
 
         self.app_handle.emit("recording-stopped", RecordingStoppedPayload {
