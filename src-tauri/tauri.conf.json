@@ -16,13 +16,13 @@
         "title": "typefree",
         "width": 800,
         "height": 600,
-        "visible": true
+        "visible": false
       },
       {
         "label": "recording-popup",
         "title": "Recording",
-        "width": 80,
-        "height": 20,
+        "width": 100,
+        "height": 30,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,

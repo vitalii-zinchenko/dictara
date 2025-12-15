@@ -88,6 +88,21 @@ impl Controller {
                     }
                     self.state = ControllerState::Ready;
                 }
+                RecordingCommand::Cancel => {
+                    if self.state != ControllerState::Recording {
+                        println!("[Controller] Cancel command received but not recording");
+                        continue;
+                    }
+                    if current_recording.is_none() {
+                        println!("[Controller] No recording to cancel");
+                        continue;
+                    }
+
+                    if let Err(e) = self.handle_cancel(current_recording.take().unwrap()) {
+                        eprintln!("[Controller] Error cancelling recording: {:?}", e);
+                    }
+                    self.state = ControllerState::Ready;
+                }
             }
         }
 
@@ -119,6 +134,15 @@ impl Controller {
 
         let recording_result = recording.stop()?;
 
+        println!("[Controller] Emitting recording-transcribing event");
+        match self.app_handle.emit("recording-transcribing", ()) {
+            Ok(_) => println!("[Controller] Successfully emitted recording-transcribing event"),
+            Err(e) => eprintln!(
+                "[Controller] Failed to emit recording-transcribing event: {:?}",
+                e
+            ),
+        }
+
         let text = self.openai_client.transcribe_audio_sync(
             PathBuf::from(&recording_result.file_path),
             recording_result.duration_ms,
@@ -143,6 +167,29 @@ impl Controller {
             RecordingStoppedPayload { text: text.clone() },
         )?;
 
+        Ok(())
+    }
+
+    fn handle_cancel(&self, recording: Recording) -> Result<(), Error> {
+        println!("[Controller] Received Cancel command");
+
+        // Stop recording (creates file but we don't use it)
+        let _recording_result = recording.stop()?;
+
+        // Restore tray icon to default state
+        if let Err(e) = crate::ui::tray::set_default_icon(&self.app_handle) {
+            eprintln!("[Controller] Failed to set default icon: {}", e);
+        }
+
+        // Hide recording popup window
+        if let Err(e) = close_recording_popup(&self.app_handle) {
+            eprintln!("[Controller] Failed to close recording popup: {}", e);
+        }
+
+        // Emit cancellation event for frontend awareness
+        self.app_handle.emit("recording-cancelled", ())?;
+
+        println!("[Controller] Recording cancelled successfully");
         Ok(())
     }
 }

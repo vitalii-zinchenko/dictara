@@ -4,6 +4,8 @@
 pub enum RecordingCommand {
     /// Start a new recording
     Start,
-    /// Stop the current recording
+    /// Stop the current recording and transcribe
     Stop,
+    /// Cancel the current recording without transcribing
+    Cancel,
 }

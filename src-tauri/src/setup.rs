@@ -2,11 +2,15 @@ use crate::{
     clients::openai::OpenAIClient,
     keyboard_listener::KeyListener,
     recording::{Controller, RecordingCommand},
-    ui::{menu::build_menu, tray::TrayIconState},
+    ui::{menu::build_menu, tray::TrayIconState, window},
 };
 use std::sync::Mutex;
 use tauri::Manager;
 use tokio::sync::mpsc;
+
+pub struct RecordingCommandSender {
+    pub sender: mpsc::Sender<RecordingCommand>,
+}
 
 pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::error::Error>> {
     // Check accessibility permission on macOS
@@ -44,6 +48,11 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
     // Create channel for recording commands (KeyListener → Controller)
     let (command_tx, command_rx) = mpsc::channel::<RecordingCommand>(100);
 
+    // Clone sender for Tauri state (mpsc::Sender is Clone + Send + Sync)
+    let command_sender_state = RecordingCommandSender {
+        sender: command_tx.clone(),
+    };
+
     // Initialize controller with OpenAI client
     let controller = Controller::new(
         command_rx,
@@ -55,6 +64,9 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
     std::thread::spawn(move || {
         controller.run();
     });
+
+    // Store sender in app state for Tauri commands
+    app.manage(command_sender_state);
 
     // Start keyboard listener with command sender
     let _listener = KeyListener::start(command_tx);
@@ -91,6 +103,14 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
         tray: Mutex::new(Some(tray)),
     };
     app.manage(tray_state);
+
+    // Debug: Open recording popup on startup
+    #[cfg(debug_assertions)]
+    {
+        if let Err(e) = window::open_recording_popup(&app.app_handle()) {
+            eprintln!("[Debug] Failed to open recording popup: {}", e);
+        }
+    }
 
     Ok(())
 }
