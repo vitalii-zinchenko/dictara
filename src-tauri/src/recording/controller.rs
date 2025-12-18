@@ -12,7 +12,7 @@ use tokio::sync::mpsc::Receiver;
 use crate::clients::openai::OpenAIClient;
 use crate::config;
 use crate::error::Error;
-use crate::recording::{audio_recorder::{AudioRecorder, cleanup_recording_file}, commands::RecordingCommand, Recording};
+use crate::recording::{audio_recorder::{AudioRecorder, cleanup_recording_file}, commands::RecordingCommand, Recording, LastRecordingState};
 use crate::sound_player;
 use crate::ui::window::{close_recording_popup, open_recording_popup};
 
@@ -40,6 +40,7 @@ pub struct Controller {
     state: ControllerState,
     shared_state: Arc<AtomicU8>,
     audio_level_channel: Arc<Mutex<Option<Channel<f32>>>>,
+    last_recording_state: LastRecordingState,
 }
 
 impl Controller {
@@ -49,6 +50,7 @@ impl Controller {
         openai_client: OpenAIClient,
         shared_state: Arc<AtomicU8>,
         audio_level_channel: Arc<Mutex<Option<Channel<f32>>>>,
+        last_recording_state: LastRecordingState,
     ) -> Self {
         let audio_recorder = AudioRecorder::new(app_handle.clone());
 
@@ -62,6 +64,7 @@ impl Controller {
             state: ControllerState::Ready,
             shared_state,
             audio_level_channel,
+            last_recording_state,
         }
     }
 
@@ -204,35 +207,77 @@ impl Controller {
         let provider_config = config::load_config(&store);
 
         // Transcribe with loaded config
-        let text = self.openai_client.transcribe_audio_sync(
+        let transcription_result = self.openai_client.transcribe_audio_sync(
             PathBuf::from(&recording_result.file_path),
             recording_result.duration_ms,
             &provider_config,
-        )?;
+        );
 
-        // Clean up recording file after successful transcription
-        cleanup_recording_file(&recording_result.file_path);
+        match transcription_result {
+            Ok(text) => {
+                // Clean up recording file after successful transcription
+                cleanup_recording_file(&recording_result.file_path);
 
-        if !text.is_empty() {
-            crate::clipboard_paste::auto_paste_text_cgevent(&text)?;
+                if !text.is_empty() {
+                    crate::clipboard_paste::auto_paste_text_cgevent(&text)?;
+                }
+
+                // Update last recording state with successful transcription
+                if let Ok(mut last_recording) = self.last_recording_state.lock() {
+                    last_recording.text = Some(text.clone());
+                    last_recording.timestamp = Some(std::time::SystemTime::now());
+                    last_recording.audio_file_path = None;
+                }
+
+                // Enable the paste menu item
+                if let Err(e) = crate::ui::tray::update_paste_menu_item(&self.app_handle, true) {
+                    eprintln!("[Controller] Failed to enable paste menu item: {}", e);
+                }
+
+                // Restore tray icon to default state
+                if let Err(e) = crate::ui::tray::set_default_icon(&self.app_handle) {
+                    eprintln!("[Controller] Failed to set default icon: {}", e);
+                }
+
+                // Hide recording popup window
+                if let Err(e) = close_recording_popup(&self.app_handle) {
+                    eprintln!("[Controller] Failed to close recording popup: {}", e);
+                }
+
+                self.app_handle.emit(
+                    "recording-stopped",
+                    RecordingStoppedPayload { text: text.clone() },
+                )?;
+
+                Ok(())
+            }
+            Err(e) => {
+                // Update last recording state with failed transcription
+                // Keep the audio file for retry
+                if let Ok(mut last_recording) = self.last_recording_state.lock() {
+                    last_recording.text = None;
+                    last_recording.timestamp = None;
+                    last_recording.audio_file_path = Some(recording_result.file_path.clone());
+                }
+
+                // Disable the paste menu item since there's no text to paste
+                if let Err(e) = crate::ui::tray::update_paste_menu_item(&self.app_handle, false) {
+                    eprintln!("[Controller] Failed to disable paste menu item: {}", e);
+                }
+
+                // Restore tray icon to default state
+                if let Err(e) = crate::ui::tray::set_default_icon(&self.app_handle) {
+                    eprintln!("[Controller] Failed to set default icon: {}", e);
+                }
+
+                // Hide recording popup window
+                if let Err(e) = close_recording_popup(&self.app_handle) {
+                    eprintln!("[Controller] Failed to close recording popup: {}", e);
+                }
+
+                Err(Error::from(e))
+            }
         }
-
-        // Restore tray icon to default state
-        if let Err(e) = crate::ui::tray::set_default_icon(&self.app_handle) {
-            eprintln!("[Controller] Failed to set default icon: {}", e);
-        }
-
-        // Hide recording popup window
-        if let Err(e) = close_recording_popup(&self.app_handle) {
-            eprintln!("[Controller] Failed to close recording popup: {}", e);
-        }
-
-        self.app_handle.emit(
-            "recording-stopped",
-            RecordingStoppedPayload { text: text.clone() },
-        )?;
-
-        Ok(())
     }
 
     fn handle_cancel(&self, recording: Recording) -> Result<(), Error> {

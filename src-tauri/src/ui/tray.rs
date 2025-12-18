@@ -7,6 +7,11 @@ pub struct TrayIconState {
     pub tray: Mutex<Option<tauri::tray::TrayIcon>>,
 }
 
+// State for the paste last recording menu item
+pub struct PasteMenuItemState {
+    pub item: tauri::menu::MenuItem<tauri::Wry>,
+}
+
 // Custom error type for tray operations
 #[derive(Debug, Display)]
 pub enum TrayError {
@@ -52,7 +57,7 @@ pub fn set_recording_icon(app_handle: &tauri::AppHandle) -> Result<(), TrayError
     tray.set_icon(Some(icon))
         .map_err(|e| TrayError::IconSetFailed(e.to_string()))?;
 
-    println!("[Tray]  Icon changed to recording state");
+    println!("[Tray]  Icon changed to recording state");
     Ok(())
 }
 
@@ -76,6 +81,22 @@ pub fn set_default_icon(app_handle: &tauri::AppHandle) -> Result<(), TrayError> 
     tray.set_icon(Some(default_icon.clone()))
         .map_err(|e| TrayError::IconSetFailed(e.to_string()))?;
 
-    println!("[Tray]  Icon restored to default state");
+    println!("[Tray]  Icon restored to default state");
+    Ok(())
+}
+
+/// Updates the "Paste Last Recording" menu item enabled state
+pub fn update_paste_menu_item(app_handle: &tauri::AppHandle, enabled: bool) -> Result<(), TrayError> {
+    println!("[Tray] Updating paste menu item - enabled: {}", enabled);
+
+    let state = app_handle
+        .try_state::<PasteMenuItemState>()
+        .ok_or(TrayError::StateNotFound)?;
+
+    state.item
+        .set_enabled(enabled)
+        .map_err(|e| TrayError::IconSetFailed(format!("Failed to set menu item enabled state: {}", e)))?;
+
+    println!("[Tray]  Paste menu item updated successfully");
     Ok(())
 }

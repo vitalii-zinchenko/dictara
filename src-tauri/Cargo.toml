@@ -27,6 +27,7 @@ rdev = { git = "https://github.com/fufesou/rdev" }
 macos-accessibility-client = "0.0.1"
 cpal = "0.15"
 hound = "3.5"
+rubato = "0.16"
 async-openai = "0.20"
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", features = ["blocking", "multipart"] }

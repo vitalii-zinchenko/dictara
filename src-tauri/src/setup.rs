@@ -3,8 +3,8 @@ use crate::{
     config::{self, Provider},
     keyboard_listener::KeyListener,
     keychain::{self, KeychainAccount},
-    recording::{Controller, RecordingCommand},
-    ui::{menu::build_menu, tray::TrayIconState, window},
+    recording::{Controller, RecordingCommand, LastRecording, LastRecordingState},
+    ui::{menu::build_menu, tray::{TrayIconState, PasteMenuItemState}, window},
 };
 use std::sync::{atomic::AtomicU8, Arc, Mutex};
 use tauri::ipc::Channel;
@@ -90,6 +90,9 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
         channel: Arc::new(Mutex::new(None)),
     };
 
+    // Create last recording state for paste retry functionality
+    let last_recording_state: LastRecordingState = Arc::new(Mutex::new(LastRecording::new()));
+
     // Initialize controller with OpenAI client
     let controller = Controller::new(
         command_rx,
@@ -97,6 +100,7 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
         openai_client,
         recording_state.clone(),
         audio_level_channel.channel.clone(),
+        last_recording_state.clone(),
     );
 
     // Spawn controller in blocking thread (cpal::Stream is not Send)
@@ -107,16 +111,20 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
     // Store sender and audio level channel in app state for Tauri commands
     app.manage(command_sender_state);
     app.manage(audio_level_channel);
+    app.manage(last_recording_state.clone());
 
     // Start keyboard listener with command sender
     let _listener = KeyListener::start(command_tx, recording_state);
 
-    let menu = build_menu(app)?;
+    let menu_with_items = build_menu(app)?;
+    let paste_menu_item_state = PasteMenuItemState {
+        item: menu_with_items.paste_last_item,
+    };
 
     // Build tray icon
     let tray = tauri::tray::TrayIconBuilder::new()
         .icon(app.default_window_icon().unwrap().clone())
-        .menu(&menu)
+        .menu(&menu_with_items.menu)
         .show_menu_on_left_click(true)
         .on_menu_event(|app, event| {
             match event.id().as_ref() {
@@ -128,6 +136,26 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
                     println!("Preferences clicked");
                     if let Err(e) = window::open_preferences_window(app) {
                         eprintln!("Failed to open preferences window: {}", e);
+                    }
+                }
+                "paste_last_recording" => {
+                    println!("Paste Last Recording clicked");
+                    // Get the last recording state
+                    if let Some(state) = app.try_state::<LastRecordingState>() {
+                        if let Ok(last_recording) = state.lock() {
+                            if let Some(text) = &last_recording.text {
+                                // Paste the last recording
+                                if let Err(e) = crate::clipboard_paste::auto_paste_text_cgevent(text) {
+                                    eprintln!("Failed to paste last recording: {:?}", e);
+                                }
+                            } else {
+                                println!("No text available to paste");
+                            }
+                        } else {
+                            eprintln!("Failed to lock last recording state");
+                        }
+                    } else {
+                        eprintln!("Last recording state not available");
                     }
                 }
                 "quit" => {
@@ -144,6 +172,7 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
         tray: Mutex::new(Some(tray)),
     };
     app.manage(tray_state);
+    app.manage(paste_menu_item_state);
 
     // Open preferences window if configuration needed
     if needs_configuration {

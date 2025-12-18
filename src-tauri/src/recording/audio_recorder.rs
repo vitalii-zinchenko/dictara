@@ -1,6 +1,7 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample};
 use hound::{WavSpec, WavWriter};
+use rubato::{FftFixedInOut, Resampler};
 use std::fs::{self, File};
 use std::io::BufWriter;
 use std::path::PathBuf;
@@ -52,21 +53,23 @@ impl Recording {
             }
         }
 
-        // Get file size
-        if let Ok(metadata) = fs::metadata(&file_path) {
-            file_size = metadata.len();
-            println!("[Recording] File size: {} bytes", file_size);
-        }
-
         // Calculate duration
         let duration_ms = SystemTime::now()
             .duration_since(self.start_timestamp)
             .unwrap()
             .as_millis() as u64;
+        let duration_sec = duration_ms as f64 / 1000.0;
+
+        // Get file size
+        if let Ok(metadata) = fs::metadata(&file_path) {
+            file_size = metadata.len();
+            let size_mb = file_size as f64 / (1024.0 * 1024.0);
+            println!("[Recording] File size: {} bytes ({:.2} MB)", file_size, size_mb);
+        }
 
         println!(
-            "[Recording] Recording stopped successfully. Duration: {}ms",
-            duration_ms
+            "[Recording] Recording stopped successfully. Duration: {}ms ({:.2}s)",
+            duration_ms, duration_sec
         );
 
         Ok(RecordingResult {
@@ -135,33 +138,64 @@ impl AudioRecorder {
             device.name().unwrap_or_else(|_| "Unknown".to_string())
         );
 
-        // Get device config to determine actual sample rate
+        // Get default device config - we'll always resample to 16kHz
         let config = device
             .default_input_config()
             .map_err(|_| RecorderError::DeviceError)?;
 
-        println!("[Audio Recorder] Input config: {:?}", config);
+        println!(
+            "[Audio Recorder] Device config: {} channels, {} Hz, {:?}",
+            config.channels(),
+            config.sample_rate().0,
+            config.sample_format()
+        );
 
         // Generate filename
         let filename = generate_filename();
         let file_path = audio_dir.join(&filename);
         println!("[Audio Recorder] Recording to: {:?}", file_path);
 
-        // Create WAV writer using the device's actual sample rate
+        // Always write 16kHz mono to file (optimal for speech transcription)
         let spec = WavSpec {
-            channels: config.channels() as u16,
-            sample_rate: config.sample_rate().0, // Use device's actual sample rate
+            channels: 1,  // Always mono
+            sample_rate: 16000,  // Always 16kHz
             bits_per_sample: 16,
             sample_format: hound::SampleFormat::Int,
         };
 
+        let needs_channel_conversion = config.channels() != 1;
+
         println!(
-            "[Audio Recorder] WAV spec: {} channels, {} Hz, 16-bit",
-            spec.channels, spec.sample_rate
+            "[Audio Recorder] Output: {} Hz mono → resampling from {} Hz {}",
+            spec.sample_rate,
+            config.sample_rate().0,
+            if needs_channel_conversion { "stereo" } else { "mono" }
         );
 
         let writer = WavWriter::create(file_path, spec).map_err(|_| RecorderError::IoError)?;
         let writer = Arc::new(Mutex::new(writer));
+
+        // Always create resampler (device sample rate → 16kHz)
+        let input_rate = config.sample_rate().0 as usize;
+        let output_rate = 16000;
+        let channels = config.channels() as usize;
+
+        let (resampler, required_chunk_size) = match FftFixedInOut::<f32>::new(input_rate, output_rate, 1024, channels) {
+            Ok(r) => {
+                // Query the actual input chunk size the resampler needs
+                let input_frames = r.input_frames_next();
+                println!("[Audio Recorder] Created FFT resampler: {}Hz {}ch → 16kHz mono (needs {} input samples per chunk)", input_rate, channels, input_frames);
+                (Arc::new(Mutex::new(r)), input_frames)
+            }
+            Err(e) => {
+                eprintln!("[Audio Recorder] Failed to create resampler: {:?}", e);
+                return Err(RecorderError::DeviceError);
+            }
+        };
+
+        // Create sample buffer for accumulating samples before resampling
+        // FftFixedInOut requires an exact number of samples (queried above)
+        let sample_buffer: Arc<Mutex<Vec<Vec<f32>>>> = Arc::new(Mutex::new(vec![Vec::new(); channels]));
 
         // Build input stream
         let writer_clone = Arc::clone(&writer);
@@ -169,16 +203,16 @@ impl AudioRecorder {
 
         let stream = match config.sample_format() {
             cpal::SampleFormat::I8 => {
-                build_input_stream::<i8>(&device, &config.into(), writer_clone, level_channel)?
+                build_input_stream::<i8>(&device, &config.into(), writer_clone, level_channel, resampler.clone(), sample_buffer.clone(), required_chunk_size, needs_channel_conversion)?
             }
             cpal::SampleFormat::I16 => {
-                build_input_stream::<i16>(&device, &config.into(), writer_clone, level_channel)?
+                build_input_stream::<i16>(&device, &config.into(), writer_clone, level_channel, resampler.clone(), sample_buffer.clone(), required_chunk_size, needs_channel_conversion)?
             }
             cpal::SampleFormat::I32 => {
-                build_input_stream::<i32>(&device, &config.into(), writer_clone, level_channel)?
+                build_input_stream::<i32>(&device, &config.into(), writer_clone, level_channel, resampler.clone(), sample_buffer.clone(), required_chunk_size, needs_channel_conversion)?
             }
             cpal::SampleFormat::F32 => {
-                build_input_stream::<f32>(&device, &config.into(), writer_clone, level_channel)?
+                build_input_stream::<f32>(&device, &config.into(), writer_clone, level_channel, resampler.clone(), sample_buffer.clone(), required_chunk_size, needs_channel_conversion)?
             }
             _ => return Err(RecorderError::DeviceError),
         };
@@ -243,6 +277,10 @@ fn build_input_stream<T>(
     config: &cpal::StreamConfig,
     writer: Arc<Mutex<WavWriter<BufWriter<File>>>>,
     level_channel: Option<Channel<f32>>,
+    resampler: Arc<Mutex<FftFixedInOut<f32>>>,
+    sample_buffer: Arc<Mutex<Vec<Vec<f32>>>>,
+    required_chunk_size: usize,
+    needs_channel_conversion: bool,
 ) -> Result<cpal::Stream, RecorderError>
 where
     T: Sample + FromSample<i16> + FromSample<f32> + std::fmt::Debug + cpal::SizedSample,
@@ -256,7 +294,7 @@ where
     let stream = device.build_input_stream(
         config,
         move |data: &[T], _: &cpal::InputCallbackInfo| {
-            write_input_data::<T>(data, &writer, &level_channel);
+            write_input_data::<T>(data, &writer, &level_channel, &resampler, &sample_buffer, required_chunk_size, needs_channel_conversion);
         },
         err_fn,
         None,
@@ -269,15 +307,18 @@ fn write_input_data<T>(
     input: &[T],
     writer: &Arc<Mutex<WavWriter<BufWriter<File>>>>,
     level_channel: &Option<Channel<f32>>,
+    resampler: &Arc<Mutex<FftFixedInOut<f32>>>,
+    sample_buffer: &Arc<Mutex<Vec<Vec<f32>>>>,
+    required_chunk_size: usize,
+    needs_channel_conversion: bool,
 ) where
     T: Sample,
     i16: FromSample<T>,
     f32: FromSample<T>,
 {
-    // Calculate RMS (Root Mean Square) for audio level visualization
+    // Calculate RMS (Root Mean Square) for audio level visualization (use original samples)
     if let Some(channel) = level_channel {
         if !input.is_empty() {
-            // Convert samples to f32 and calculate RMS
             let sum_of_squares: f32 = input
                 .iter()
                 .map(|&sample| {
@@ -285,24 +326,95 @@ fn write_input_data<T>(
                     sample_f32 * sample_f32
                 })
                 .sum();
-
             let rms = (sum_of_squares / input.len() as f32).sqrt();
-
-            // Normalize to 0.0-1.0 range (audio samples are typically -1.0 to 1.0)
-            // Multiply by a high gain factor to make visualization more visible
-            // Boost from 3x to 100x for better visibility with quiet microphones
             let level = (rms * 100.0).min(1.0);
-
-            // Send level to frontend (ignore errors if channel is closed)
             let _ = channel.send(level);
         }
     }
 
-    // Write audio data to WAV file
-    if let Ok(mut guard) = writer.lock() {
-        for &sample in input.iter() {
-            let sample_i16: i16 = sample.to_sample();
-            guard.write_sample(sample_i16).ok();
+    // Convert samples to f32 and organize by channel, then append to buffer
+    let num_channels = if needs_channel_conversion { 2 } else { 1 };
+
+    let mut buffer_guard = match sample_buffer.lock() {
+        Ok(guard) => guard,
+        Err(_) => {
+            eprintln!("[Audio Recorder] Failed to lock sample buffer");
+            return;
         }
+    };
+
+    // Append incoming samples to buffer
+    for (i, &sample) in input.iter().enumerate() {
+        let channel_idx = i % num_channels;
+        let sample_f32: f32 = sample.to_sample();
+        buffer_guard[channel_idx].push(sample_f32);
     }
+
+    // Process complete chunks of required_chunk_size samples
+    while buffer_guard[0].len() >= required_chunk_size {
+        // Extract required_chunk_size samples from each channel
+        let channel_chunks: Vec<Vec<f32>> = buffer_guard
+            .iter_mut()
+            .map(|ch| ch.drain(..required_chunk_size).collect())
+            .collect();
+
+        // Release buffer lock before resampling (to avoid holding multiple locks)
+        drop(buffer_guard);
+
+        // Resample the chunk
+        let resampled = {
+            let mut resampler_guard = match resampler.lock() {
+                Ok(guard) => guard,
+                Err(_) => {
+                    eprintln!("[Audio Recorder] Failed to lock resampler");
+                    return;
+                }
+            };
+
+            let channel_refs: Vec<&[f32]> = channel_chunks.iter()
+                .map(|v| v.as_slice())
+                .collect();
+
+            match resampler_guard.process(&channel_refs, None) {
+                Ok(resampled) => resampled,
+                Err(e) => {
+                    eprintln!("[Audio Recorder] Resampling error: {:?}", e);
+                    return;
+                }
+            }
+        };
+
+        // Convert to mono if needed (average stereo channels)
+        let mono_samples = if needs_channel_conversion && resampled.len() >= 2 {
+            let output_frames = resampled[0].len();
+            let mut mono = Vec::with_capacity(output_frames);
+            for i in 0..output_frames {
+                let mixed = (resampled[0][i] + resampled[1][i]) / 2.0;
+                mono.push(mixed);
+            }
+            mono
+        } else {
+            // Already mono, just use first channel
+            resampled[0].clone()
+        };
+
+        // Write to WAV file as i16
+        if let Ok(mut guard) = writer.lock() {
+            for sample_f32 in mono_samples.iter() {
+                let clamped = sample_f32.clamp(-1.0, 1.0);
+                let sample_i16 = (clamped * 32767.0) as i16;
+                guard.write_sample(sample_i16).ok();
+            }
+        }
+
+        // Re-acquire buffer lock for next iteration
+        buffer_guard = match sample_buffer.lock() {
+            Ok(guard) => guard,
+            Err(_) => {
+                eprintln!("[Audio Recorder] Failed to re-lock sample buffer");
+                return;
+            }
+        };
+    }
+    // Remaining samples (< required_chunk_size) stay in buffer for next call
 }
