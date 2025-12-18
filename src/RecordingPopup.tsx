@@ -6,12 +6,18 @@ import { Square, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import "./RecordingPopup.css";
 
+// Maximum recording duration (10 minutes). Change to 10000 for 10-second testing
+const MAX_RECORDING_DURATION_MS = 10 * 60 * 1000;
+
 function RecordingPopup() {
   const [recording, setRecording] = useState(true);
   const [transcribing, setTranscribing] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
   const [smoothedLevel, setSmoothedLevel] = useState(0);
+  const [elapsedMs, setElapsedMs] = useState(0);
   const animationFrameRef = useRef<number | undefined>(undefined);
+  const startTimeRef = useRef<number | undefined>(undefined);
+  const timerIntervalRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
   // Smooth the audio level using requestAnimationFrame
   useEffect(() => {
@@ -33,6 +39,62 @@ function RecordingPopup() {
       }
     };
   }, [audioLevel]);
+
+  const handleCancel = async () => {
+    console.log("Cancel clicked");
+    try {
+      await invoke("cancel_recording");
+    } catch (error) {
+      console.error("Failed to cancel recording:", error);
+    }
+  };
+
+  const handleStop = async () => {
+    console.log("Stop recording clicked");
+    try {
+      await invoke("stop_recording");
+    } catch (error) {
+      console.error("Failed to stop recording:", error);
+    }
+  };
+
+  // Timer cleanup helper
+  const cleanupTimer = () => {
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = undefined;
+    }
+    startTimeRef.current = undefined;
+    setElapsedMs(0);
+  };
+
+  // Timer update helper
+  const startTimer = () => {
+    console.log('[Popup] Starting countdown timer');
+    // Clean up any existing timer first
+    cleanupTimer();
+
+    // Set start time
+    startTimeRef.current = Date.now();
+
+    // Initialize display to max duration
+    setElapsedMs(MAX_RECORDING_DURATION_MS);
+
+    // Start countdown interval
+    timerIntervalRef.current = setInterval(() => {
+      if (startTimeRef.current === undefined) return;
+
+      const elapsed = Date.now() - startTimeRef.current;
+      const remaining = Math.max(0, MAX_RECORDING_DURATION_MS - elapsed);
+      setElapsedMs(remaining);
+
+      if (remaining <= 0) {
+        console.log('[Popup] Countdown reached 0, auto-stopping');
+        cleanupTimer();
+        handleStop();
+      }
+    }, 1000); // Update every 100ms for smooth display
+  };
 
   useEffect(() => {
     // Set up audio level channel
@@ -66,25 +128,28 @@ function RecordingPopup() {
         console.log("[Popup] Recording started");
         setRecording(true);
         setTranscribing(false);
+        startTimer(); // Start countdown timer
       });
 
       const unlistenTranscribing = await listen("recording-transcribing", () => {
         console.log("[Popup] Recording transcribing");
         setRecording(false);
         setTranscribing(true);
-
+        cleanupTimer(); // Stop and reset timer
       });
 
       const unlistenStop = await listen("recording-stopped", () => {
         console.log("[Popup] Recording stopped");
         setRecording(true);
         setTranscribing(false);
+        cleanupTimer(); // Stop and reset timer
       });
 
       const unlistenCancelled = await listen("recording-cancelled", () => {
         console.log("[Popup] Recording cancelled");
         setRecording(true);
         setTranscribing(false);
+        cleanupTimer(); // Stop and reset timer
       });
 
       return () => {
@@ -92,6 +157,7 @@ function RecordingPopup() {
         unlistenTranscribing();
         unlistenStop();
         unlistenCancelled();
+        cleanupTimer(); // Clean up timer on unmount
       };
     };
 
@@ -105,22 +171,12 @@ function RecordingPopup() {
     };
   }, []);
 
-  const handleCancel = async () => {
-    console.log("Cancel clicked");
-    try {
-      await invoke("cancel_recording");
-    } catch (error) {
-      console.error("Failed to cancel recording:", error);
-    }
-  };
-
-  const handleStop = async () => {
-    console.log("Stop recording clicked");
-    try {
-      await invoke("stop_recording");
-    } catch (error) {
-      console.error("Failed to stop recording:", error);
-    }
+  // Format milliseconds to MM:SS
+  const formatTime = (ms: number): string => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
 
   // Calculate inset shadow based on audio level
@@ -137,9 +193,14 @@ function RecordingPopup() {
 
       { recording &&
         <div
-          className="flex items-center justify-center w-full h-full bg-gray-800"
+          className="flex flex-col items-center justify-center w-full h-full bg-gray-800"
           style={{ boxShadow: getInsetShadow(smoothedLevel) }}
         >
+          {/* Timer Display */}
+          <div className="text-gray-300 font-mono text-xs mb-2">
+            {formatTime(elapsedMs)}
+          </div>
+
           {/* Button Row */}
           <div className="flex gap-2">
             {/* Cancel Button */}
