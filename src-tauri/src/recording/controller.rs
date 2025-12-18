@@ -12,7 +12,7 @@ use tokio::sync::mpsc::Receiver;
 use crate::clients::openai::OpenAIClient;
 use crate::config;
 use crate::error::Error;
-use crate::recording::{audio_recorder::AudioRecorder, commands::RecordingCommand, Recording};
+use crate::recording::{audio_recorder::{AudioRecorder, cleanup_recording_file}, commands::RecordingCommand, Recording};
 use crate::sound_player;
 use crate::ui::window::{close_recording_popup, open_recording_popup};
 
@@ -210,6 +210,9 @@ impl Controller {
             &provider_config,
         )?;
 
+        // Clean up recording file after successful transcription
+        cleanup_recording_file(&recording_result.file_path);
+
         if !text.is_empty() {
             crate::clipboard_paste::auto_paste_text_cgevent(&text)?;
         }
@@ -236,7 +239,10 @@ impl Controller {
         println!("[Controller] Received Cancel command");
 
         // Stop recording (creates file but we don't use it)
-        let _recording_result = recording.stop()?;
+        let recording_result = recording.stop()?;
+
+        // Clean up the cancelled recording file immediately
+        cleanup_recording_file(&recording_result.file_path);
 
         // Restore tray icon to default state
         if let Err(e) = crate::ui::tray::set_default_icon(&self.app_handle) {

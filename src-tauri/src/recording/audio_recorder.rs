@@ -1,12 +1,13 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample};
-use hound::{WavWriter, WavSpec};
+use hound::{WavSpec, WavWriter};
 use std::fs::{self, File};
 use std::io::BufWriter;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 use tauri::ipc::Channel;
+use tauri::Manager;
 
 #[derive(Debug, Clone)]
 pub struct RecordingResult {
@@ -35,7 +36,7 @@ impl Recording {
         drop(self.stream);
 
         // Construct file path
-        let audio_dir = ensure_audio_dir_exists()?;
+        let audio_dir = ensure_audio_dir_exists(&self.app_handle)?;
         let file_path = audio_dir.join(&self.filename);
 
         // Finalize WAV file
@@ -63,7 +64,10 @@ impl Recording {
             .unwrap()
             .as_millis() as u64;
 
-        println!("[Recording] Recording stopped successfully. Duration: {}ms", duration_ms);
+        println!(
+            "[Recording] Recording stopped successfully. Duration: {}ms",
+            duration_ms
+        );
 
         Ok(RecordingResult {
             file_path: file_path.to_string_lossy().to_string(),
@@ -118,7 +122,7 @@ impl AudioRecorder {
         println!("[AudioRecorder] Starting recording...");
 
         // Ensure audio directory exists
-        let audio_dir = ensure_audio_dir_exists()?;
+        let audio_dir = ensure_audio_dir_exists(&self.app_handle)?;
 
         // Get audio host and device first
         let host = cpal::default_host();
@@ -126,7 +130,10 @@ impl AudioRecorder {
             .default_input_device()
             .ok_or(RecorderError::NoInputDevice)?;
 
-        println!("[Audio Recorder] Using input device: {}", device.name().unwrap_or_else(|_| "Unknown".to_string()));
+        println!(
+            "[Audio Recorder] Using input device: {}",
+            device.name().unwrap_or_else(|_| "Unknown".to_string())
+        );
 
         // Get device config to determine actual sample rate
         let config = device
@@ -148,10 +155,12 @@ impl AudioRecorder {
             sample_format: hound::SampleFormat::Int,
         };
 
-        println!("[Audio Recorder] WAV spec: {} channels, {} Hz, 16-bit", spec.channels, spec.sample_rate);
+        println!(
+            "[Audio Recorder] WAV spec: {} channels, {} Hz, 16-bit",
+            spec.channels, spec.sample_rate
+        );
 
-        let writer = WavWriter::create(file_path, spec)
-            .map_err(|_| RecorderError::IoError)?;
+        let writer = WavWriter::create(file_path, spec).map_err(|_| RecorderError::IoError)?;
         let writer = Arc::new(Mutex::new(writer));
 
         // Build input stream
@@ -159,13 +168,19 @@ impl AudioRecorder {
         let err_writer_clone = Arc::clone(&writer);
 
         let stream = match config.sample_format() {
-            cpal::SampleFormat::I8 => build_input_stream::<i8>(&device, &config.into(), writer_clone, level_channel)?,
-            cpal::SampleFormat::I16 => build_input_stream::<i16>(&device, &config.into(), writer_clone, level_channel)?,
-            cpal::SampleFormat::I32 => build_input_stream::<i32>(&device, &config.into(), writer_clone, level_channel)?,
-            cpal::SampleFormat::F32 => build_input_stream::<f32>(&device, &config.into(), writer_clone, level_channel)?,
-            _ => {
-                return Err(RecorderError::DeviceError)
+            cpal::SampleFormat::I8 => {
+                build_input_stream::<i8>(&device, &config.into(), writer_clone, level_channel)?
             }
+            cpal::SampleFormat::I16 => {
+                build_input_stream::<i16>(&device, &config.into(), writer_clone, level_channel)?
+            }
+            cpal::SampleFormat::I32 => {
+                build_input_stream::<i32>(&device, &config.into(), writer_clone, level_channel)?
+            }
+            cpal::SampleFormat::F32 => {
+                build_input_stream::<f32>(&device, &config.into(), writer_clone, level_channel)?
+            }
+            _ => return Err(RecorderError::DeviceError),
         };
 
         // Start the stream
@@ -186,13 +201,33 @@ impl AudioRecorder {
     }
 }
 
-fn ensure_audio_dir_exists() -> Result<PathBuf, RecorderError> {
-    let audio_dir = PathBuf::from("/Users/vitaliizinchenko/Projects/typefree/audio");
+fn ensure_audio_dir_exists(app_handle: &tauri::AppHandle) -> Result<PathBuf, RecorderError> {
+    let cache_dir = app_handle
+        .path()
+        .app_cache_dir()
+        .map_err(|_| RecorderError::IoError)?;
+
+    let audio_dir = cache_dir.join("recordings");
+
     if !audio_dir.exists() {
         fs::create_dir_all(&audio_dir)?;
         println!("[Audio Recorder] Created audio directory: {:?}", audio_dir);
     }
     Ok(audio_dir)
+}
+
+/// Clean up a recording file
+/// Logs errors but doesn't fail - cleanup is best-effort
+pub fn cleanup_recording_file(file_path: &str) {
+    match fs::remove_file(file_path) {
+        Ok(_) => println!("[Audio Recorder] Cleaned up recording file: {}", file_path),
+        Err(e) => {
+            eprintln!(
+                "[Audio Recorder] Failed to cleanup recording file {}: {}",
+                file_path, e
+            );
+        }
+    }
 }
 
 fn generate_filename() -> String {
@@ -234,8 +269,7 @@ fn write_input_data<T>(
     input: &[T],
     writer: &Arc<Mutex<WavWriter<BufWriter<File>>>>,
     level_channel: &Option<Channel<f32>>,
-)
-where
+) where
     T: Sample,
     i16: FromSample<T>,
     f32: FromSample<T>,
@@ -244,7 +278,8 @@ where
     if let Some(channel) = level_channel {
         if !input.is_empty() {
             // Convert samples to f32 and calculate RMS
-            let sum_of_squares: f32 = input.iter()
+            let sum_of_squares: f32 = input
+                .iter()
                 .map(|&sample| {
                     let sample_f32: f32 = sample.to_sample();
                     sample_f32 * sample_f32

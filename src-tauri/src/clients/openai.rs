@@ -1,10 +1,10 @@
+use crate::config::{Provider, ProviderConfig};
+use crate::keychain::{self, KeychainAccount};
 use async_openai::{
     config::OpenAIConfig,
     types::{AudioResponseFormat, CreateTranscriptionRequestArgs},
     Client,
 };
-use crate::config::{Provider, ProviderConfig};
-use crate::keychain::{self, KeychainAccount};
 use std::path::PathBuf;
 
 const MIN_AUDIO_DURATION_MS: u64 = 500; // Minimum 0.5 seconds
@@ -148,9 +148,13 @@ impl OpenAIClient {
                 let key = keychain::load_api_key(KeychainAccount::Azure)
                     .map_err(|_| TranscriptionError::ApiKeyMissing)?
                     .ok_or(TranscriptionError::ApiKeyMissing)?;
-                let endpoint = config.azure_endpoint.clone().ok_or(
-                    TranscriptionError::ApiError("Azure endpoint not configured".to_string()),
-                )?;
+                let endpoint =
+                    config
+                        .azure_endpoint
+                        .clone()
+                        .ok_or(TranscriptionError::ApiError(
+                            "Azure endpoint not configured".to_string(),
+                        ))?;
                 (key, endpoint)
             }
         };
@@ -370,12 +374,7 @@ impl OpenAIClient {
 
         // Load API configuration
         let api_config = Self::load_config(config)?;
-        println!(
-            "[OpenAI Client] Using provider: {:?}",
-            api_config.provider
-        );
-
-        let model = "whisper-1"; // Model name for form data (OpenAI) or deployment name (Azure)
+        println!("[OpenAI Client] Using provider: {:?}", api_config.provider);
 
         // Build multipart form
         let mut form = reqwest::blocking::multipart::Form::new()
@@ -387,11 +386,13 @@ impl OpenAIClient {
                 ))
             })?
             .text("temperature", "0.0")
-            .text("prompt", "If input is empty do not return anything.")
+            // .text("prompt", " ")
             .text("response_format", "json");
 
         // OpenAI requires model in form data, Azure embeds it in URL
         if api_config.provider == Provider::OpenAI {
+            let model = "whisper-1";
+            // let model = "gpt-4o-transcribe";
             form = form.text("model", model);
         }
 
@@ -510,9 +511,7 @@ impl OpenAIClient {
             .temperature(0.0)
             .response_format(AudioResponseFormat::Json)
             .build()
-            .map_err(|e| {
-                TranscriptionError::ApiError(format!("Failed to build request: {}", e))
-            })?;
+            .map_err(|e| TranscriptionError::ApiError(format!("Failed to build request: {}", e)))?;
 
         // Call OpenAI API
         println!("[OpenAI Client] Sending request to OpenAI API...");

@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:tauri": "tauri dev",
+    "dev:tauri:no-reload": "tauri dev --no-watch",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
