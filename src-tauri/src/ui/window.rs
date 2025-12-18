@@ -216,7 +216,7 @@ pub fn open_preferences_window(app_handle: &tauri::AppHandle) -> Result<(), AnyE
         .title("Preferences")
         .inner_size(width, height)
         .min_inner_size(width, height)
-        .max_inner_size(width, height)
+        // .max_inner_size(width, height)
         .visible(false)
         .build()?,
     };

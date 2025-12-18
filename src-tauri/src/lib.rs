@@ -1,5 +1,6 @@
 mod clients;
 mod clipboard_paste;
+mod config;
 mod error;
 mod events;
 mod keychain;
@@ -15,6 +16,7 @@ pub fn run() {
     dotenvy::dotenv().ok();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_store::Builder::new().build())
         .setup(|app| {
             return setup::setup_app(app);
         })
@@ -24,10 +26,20 @@ pub fn run() {
             tauri_commands::restart_app,
             tauri_commands::stop_recording,
             tauri_commands::cancel_recording,
+            // Provider configuration
+            tauri_commands::load_provider_config,
+            tauri_commands::save_provider_config,
+            // OpenAI
             tauri_commands::save_openai_key,
             tauri_commands::load_openai_key,
             tauri_commands::delete_openai_key,
             tauri_commands::test_openai_key,
+            // Azure
+            tauri_commands::save_azure_key,
+            tauri_commands::load_azure_key,
+            tauri_commands::delete_azure_key,
+            tauri_commands::test_azure_key,
+            // Audio
             tauri_commands::register_audio_level_channel
         ])
         .run(tauri::generate_context!())

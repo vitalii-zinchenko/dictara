@@ -1,14 +1,16 @@
 use serde::Serialize;
 use std::path::PathBuf;
-use tauri::{Emitter, Manager};
-use tauri::ipc::Channel;
-use tokio::sync::mpsc::Receiver;
 use std::sync::{
     atomic::{AtomicU8, Ordering},
     Arc, Mutex,
 };
+use tauri::ipc::Channel;
+use tauri::Emitter;
+use tauri_plugin_store::StoreExt;
+use tokio::sync::mpsc::Receiver;
 
 use crate::clients::openai::OpenAIClient;
+use crate::config;
 use crate::error::Error;
 use crate::recording::{audio_recorder::AudioRecorder, commands::RecordingCommand, Recording};
 use crate::sound_player;
@@ -189,9 +191,23 @@ impl Controller {
             ),
         }
 
+        // Load provider config
+        let store = match self.app_handle.store("config.json") {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[Controller] Failed to load config store: {}", e);
+                return Err(Error::from(crate::clients::openai::TranscriptionError::ApiError(
+                    format!("Failed to load config: {}", e),
+                )));
+            }
+        };
+        let provider_config = config::load_config(&store);
+
+        // Transcribe with loaded config
         let text = self.openai_client.transcribe_audio_sync(
             PathBuf::from(&recording_result.file_path),
             recording_result.duration_ms,
+            &provider_config,
         )?;
 
         if !text.is_empty() {

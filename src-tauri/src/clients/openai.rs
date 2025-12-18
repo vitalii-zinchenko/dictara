@@ -3,11 +3,19 @@ use async_openai::{
     types::{AudioResponseFormat, CreateTranscriptionRequestArgs},
     Client,
 };
-use crate::keychain;
+use crate::config::{Provider, ProviderConfig};
+use crate::keychain::{self, KeychainAccount};
 use std::path::PathBuf;
 
 const MIN_AUDIO_DURATION_MS: u64 = 500; // Minimum 0.5 seconds
 const MAX_FILE_SIZE_BYTES: u64 = 25 * 1024 * 1024; // 25MB limit
+
+// Azure API version
+const AZURE_API_VERSION: &str = "2024-06-01";
+
+// OpenAI endpoints
+const OPENAI_MODELS_URL: &str = "https://api.openai.com/v1/models";
+const OPENAI_TRANSCRIPTION_URL: &str = "https://api.openai.com/v1/audio/transcriptions";
 
 #[derive(Debug)]
 pub enum TranscriptionError {
@@ -38,14 +46,65 @@ impl std::fmt::Display for TranscriptionError {
                 write!(f, "Audio file not found: {}", path)
             }
             TranscriptionError::ApiError(msg) => {
-                write!(f, "OpenAI API error: {}", msg)
+                write!(f, "API error: {}", msg)
             }
             TranscriptionError::IoError(err) => {
                 write!(f, "IO error: {}", err)
             }
             TranscriptionError::ApiKeyMissing => {
-                write!(f, "OPENAI_API_KEY environment variable not set")
+                write!(f, "API key not configured")
             }
+        }
+    }
+}
+
+/// Configuration for making API calls
+#[derive(Debug, Clone)]
+pub struct ApiConfig {
+    pub provider: Provider,
+    pub api_key: String,
+    pub endpoint: String, // Full transcription endpoint for Azure (without api-version), unused for OpenAI
+}
+
+impl ApiConfig {
+    /// Construct the full transcription URL based on provider
+    fn transcription_url(&self) -> String {
+        match self.provider {
+            Provider::OpenAI => OPENAI_TRANSCRIPTION_URL.to_string(),
+            Provider::Azure => {
+                // Azure URL format: user provides full endpoint path, we just add api-version
+                // Example: https://xxx.cognitiveservices.azure.com/openai/deployments/whisper/audio/transcriptions
+                format!(
+                    "{}?api-version={}",
+                    self.endpoint.trim_end_matches('/'),
+                    AZURE_API_VERSION
+                )
+            }
+        }
+    }
+
+    /// Construct the models URL for API key validation
+    fn models_url(&self) -> String {
+        match self.provider {
+            Provider::OpenAI => OPENAI_MODELS_URL.to_string(),
+            Provider::Azure => {
+                format!(
+                    "{}/openai/deployments?api-version={}",
+                    self.endpoint.trim_end_matches('/'),
+                    AZURE_API_VERSION
+                )
+            }
+        }
+    }
+
+    /// Add authentication header to request builder
+    fn add_auth_header(
+        &self,
+        request: reqwest::blocking::RequestBuilder,
+    ) -> reqwest::blocking::RequestBuilder {
+        match self.provider {
+            Provider::OpenAI => request.bearer_auth(&self.api_key),
+            Provider::Azure => request.header("api-key", &self.api_key),
         }
     }
 }
@@ -56,7 +115,6 @@ pub struct OpenAIClient {
 
 impl Clone for OpenAIClient {
     fn clone(&self) -> Self {
-        // Create a new client instance (Client is cheap to clone/recreate)
         OpenAIClient {
             client: Client::new(),
         }
@@ -65,81 +123,194 @@ impl Clone for OpenAIClient {
 
 impl OpenAIClient {
     /// Create a new OpenAI client
-    /// Loads API key from macOS Keychain and sets it in environment
-    /// Always succeeds - key will be checked at transcription time
     pub fn new() -> Self {
         println!("[OpenAI Client] Initializing client");
-
-        // Try to load API key from keychain
-        match keychain::load_api_key() {
-            Ok(Some(api_key)) => {
-                println!("[OpenAI Client] ✅ API key loaded from keychain");
-                std::env::set_var("OPENAI_API_KEY", &api_key);
-            }
-            Ok(None) => {
-                println!("[OpenAI Client] ⚠️  No API key found in keychain");
-            }
-            Err(e) => {
-                eprintln!("[OpenAI Client] ❌ Failed to load API key from keychain: {:?}", e);
-            }
-        }
-
         OpenAIClient {
             client: Client::new(),
         }
     }
 
-    /// Check if an API key is configured in the keychain
-    pub fn has_api_key() -> bool {
-        match keychain::load_api_key() {
-            Ok(Some(_)) => true,
-            _ => false,
-        }
+    /// Load API configuration from keychain and config store
+    pub fn load_config(config: &ProviderConfig) -> Result<ApiConfig, TranscriptionError> {
+        let provider = config
+            .enabled_provider
+            .as_ref()
+            .ok_or(TranscriptionError::ApiKeyMissing)?;
+
+        let (api_key, endpoint) = match provider {
+            Provider::OpenAI => {
+                let key = keychain::load_api_key(KeychainAccount::OpenAI)
+                    .map_err(|_| TranscriptionError::ApiKeyMissing)?
+                    .ok_or(TranscriptionError::ApiKeyMissing)?;
+                (key, String::new())
+            }
+            Provider::Azure => {
+                let key = keychain::load_api_key(KeychainAccount::Azure)
+                    .map_err(|_| TranscriptionError::ApiKeyMissing)?
+                    .ok_or(TranscriptionError::ApiKeyMissing)?;
+                let endpoint = config.azure_endpoint.clone().ok_or(
+                    TranscriptionError::ApiError("Azure endpoint not configured".to_string()),
+                )?;
+                (key, endpoint)
+            }
+        };
+
+        Ok(ApiConfig {
+            provider: provider.clone(),
+            api_key,
+            endpoint,
+        })
     }
 
-    /// Test if an API key is valid by calling the OpenAI /v1/models endpoint
+    /// Test if an API key is valid
     ///
     /// # Arguments
+    /// * `provider` - The provider type (OpenAI or Azure)
     /// * `key` - The API key to test
+    /// * `endpoint` - Optional Azure endpoint (required for Azure, ignored for OpenAI)
     ///
     /// # Returns
     /// * `Ok(true)` - Key is valid
     /// * `Ok(false)` - Key is invalid (401 Unauthorized)
     /// * `Err(TranscriptionError)` - Network or other API error
-    pub fn test_api_key(key: &str) -> Result<bool, TranscriptionError> {
-        println!("[OpenAI Client] Testing API key validity...");
+    pub fn test_api_key(
+        provider: Provider,
+        key: &str,
+        endpoint: Option<&str>,
+    ) -> Result<bool, TranscriptionError> {
+        println!(
+            "[OpenAI Client] Testing API key validity for {:?}...",
+            provider
+        );
 
-        let client = reqwest::blocking::Client::new();
-        let response = client
-            .get("https://api.openai.com/v1/models")
-            .bearer_auth(key)
-            .send()
-            .map_err(|e| {
-                eprintln!("[OpenAI Client] Request failed: {}", e);
-                TranscriptionError::ApiError(format!("Request failed: {}", e))
-            })?;
+        match provider {
+            Provider::OpenAI => {
+                // OpenAI: Use models endpoint for quick validation
+                let api_config = ApiConfig {
+                    provider: provider.clone(),
+                    api_key: key.to_string(),
+                    endpoint: String::new(),
+                };
 
-        let status = response.status();
-        println!("[OpenAI Client] API test response status: {}", status);
+                let client = reqwest::blocking::Client::new();
+                let request = client.get(api_config.models_url());
+                let request = api_config.add_auth_header(request);
 
-        if status.is_success() {
-            println!("[OpenAI Client] ✅ API key is valid");
-            Ok(true)
-        } else if status.as_u16() == 401 {
-            println!("[OpenAI Client] ❌ API key is invalid (401 Unauthorized)");
-            Ok(false)
-        } else {
-            let error_text = response
-                .text()
-                .unwrap_or_else(|_| "Unknown error".to_string());
-            eprintln!(
-                "[OpenAI Client] Unexpected API response ({}): {}",
-                status, error_text
-            );
-            Err(TranscriptionError::ApiError(format!(
-                "API returned status {}: {}",
-                status, error_text
-            )))
+                let response = request.send().map_err(|e| {
+                    eprintln!("[OpenAI Client] Request failed: {}", e);
+                    TranscriptionError::ApiError(format!("Request failed: {}", e))
+                })?;
+
+                let status = response.status();
+                println!("[OpenAI Client] API test response status: {}", status);
+
+                if status.is_success() {
+                    println!("[OpenAI Client] ✅ API key is valid");
+                    Ok(true)
+                } else if status.as_u16() == 401 {
+                    println!("[OpenAI Client] ❌ API key is invalid (401 Unauthorized)");
+                    Ok(false)
+                } else {
+                    let error_text = response
+                        .text()
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+                    eprintln!(
+                        "[OpenAI Client] Unexpected API response ({}): {}",
+                        status, error_text
+                    );
+                    Err(TranscriptionError::ApiError(format!(
+                        "API returned status {}: {}",
+                        status, error_text
+                    )))
+                }
+            }
+            Provider::Azure => {
+                // Azure: Test with actual transcription since /deployments endpoint is deprecated
+                println!("[OpenAI Client] Testing Azure with silent audio transcription...");
+
+                // Generate a tiny silent audio file for testing
+                let temp_dir = std::env::temp_dir();
+                let test_audio_path = temp_dir.join("typefree_test_silent.wav");
+
+                // Generate 1 second silent audio
+                let ffmpeg_result = std::process::Command::new("ffmpeg")
+                    .args(&[
+                        "-f",
+                        "lavfi",
+                        "-i",
+                        "anullsrc=r=16000:cl=mono",
+                        "-t",
+                        "1.0",
+                        "-y",
+                        test_audio_path.to_str().unwrap(),
+                    ])
+                    .output()
+                    .map_err(|e| {
+                        TranscriptionError::ApiError(format!(
+                            "Failed to generate test audio: {}",
+                            e
+                        ))
+                    })?;
+
+                if !ffmpeg_result.status.success() {
+                    return Err(TranscriptionError::ApiError(
+                        "Failed to generate test audio with ffmpeg".to_string(),
+                    ));
+                }
+
+                // Test transcription
+                let api_config = ApiConfig {
+                    provider: Provider::Azure,
+                    api_key: key.to_string(),
+                    endpoint: endpoint.unwrap_or("").to_string(),
+                };
+
+                let form = reqwest::blocking::multipart::Form::new()
+                    .file("file", &test_audio_path)
+                    .map_err(|e| {
+                        TranscriptionError::IoError(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("Failed to read test file: {}", e),
+                        ))
+                    })?
+                    .text("temperature", "0.0")
+                    .text("response_format", "json");
+
+                let client = reqwest::blocking::Client::new();
+                let request = client.post(api_config.transcription_url());
+                let request = api_config.add_auth_header(request);
+
+                let response = request.multipart(form).send().map_err(|e| {
+                    eprintln!("[OpenAI Client] Azure test request failed: {}", e);
+                    TranscriptionError::ApiError(format!("Request failed: {}", e))
+                })?;
+
+                let status = response.status();
+                println!("[OpenAI Client] Azure test response status: {}", status);
+
+                // Clean up test file
+                let _ = std::fs::remove_file(&test_audio_path);
+
+                if status.is_success() {
+                    println!("[OpenAI Client] ✅ Azure API key is valid");
+                    Ok(true)
+                } else if status.as_u16() == 401 {
+                    println!("[OpenAI Client] ❌ Azure API key is invalid (401 Unauthorized)");
+                    Ok(false)
+                } else {
+                    let error_text = response
+                        .text()
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+                    eprintln!(
+                        "[OpenAI Client] Azure test failed ({}): {}",
+                        status, error_text
+                    );
+                    Err(TranscriptionError::ApiError(format!(
+                        "API returned status {}: {}",
+                        status, error_text
+                    )))
+                }
+            }
         }
     }
 
@@ -148,6 +319,7 @@ impl OpenAIClient {
     /// # Arguments
     /// * `file_path` - Path to the audio file (WAV, MP3, etc.)
     /// * `duration_ms` - Duration of the recording in milliseconds (for validation)
+    /// * `config` - Provider configuration (which provider to use and settings)
     ///
     /// # Returns
     /// * `Ok(String)` - Transcribed text
@@ -156,6 +328,7 @@ impl OpenAIClient {
         &self,
         file_path: PathBuf,
         duration_ms: u64,
+        config: &ProviderConfig,
     ) -> Result<String, TranscriptionError> {
         println!(
             "[OpenAI Client] Transcribing (sync): {:?} (duration: {}ms)",
@@ -195,28 +368,17 @@ impl OpenAIClient {
 
         println!("[OpenAI Client] File size: {} bytes", file_size);
 
-        // Load API key from keychain each time (in case it was just saved)
-        let api_key = match keychain::load_api_key() {
-            Ok(Some(key)) => {
-                println!("[OpenAI Client] Using API key from keychain");
-                // Set in env for this request
-                std::env::set_var("OPENAI_API_KEY", &key);
-                key
-            }
-            Ok(None) => {
-                eprintln!("[OpenAI Client] No API key configured");
-                return Err(TranscriptionError::ApiKeyMissing);
-            }
-            Err(e) => {
-                eprintln!("[OpenAI Client] Failed to load API key: {:?}", e);
-                return Err(TranscriptionError::ApiKeyMissing);
-            }
-        };
+        // Load API configuration
+        let api_config = Self::load_config(config)?;
+        println!(
+            "[OpenAI Client] Using provider: {:?}",
+            api_config.provider
+        );
 
-        let model = "gpt-4o-transcribe";
+        let model = "whisper-1"; // Model name for form data (OpenAI) or deployment name (Azure)
 
         // Build multipart form
-        let form = reqwest::blocking::multipart::Form::new()
+        let mut form = reqwest::blocking::multipart::Form::new()
             .file("file", &file_path)
             .map_err(|e| {
                 TranscriptionError::IoError(std::io::Error::new(
@@ -224,23 +386,33 @@ impl OpenAIClient {
                     format!("Failed to read file: {}", e),
                 ))
             })?
-            .text("model", model)
             .text("temperature", "0.0")
             .text("prompt", "If input is empty do not return anything.")
             .text("response_format", "json");
 
-        // Call OpenAI API
-        println!("[OpenAI Client] Sending request to OpenAI API...");
+        // OpenAI requires model in form data, Azure embeds it in URL
+        if api_config.provider == Provider::OpenAI {
+            form = form.text("model", model);
+        }
+
+        // Call API
+        println!(
+            "[OpenAI Client] Sending request to {} API...",
+            if api_config.provider == Provider::OpenAI {
+                "OpenAI"
+            } else {
+                "Azure"
+            }
+        );
+
         let client = reqwest::blocking::Client::new();
-        let response = client
-            .post("https://api.openai.com/v1/audio/transcriptions")
-            .bearer_auth(api_key)
-            .multipart(form)
-            .send()
-            .map_err(|e| {
-                eprintln!("[OpenAI Client] API request error: {}", e);
-                TranscriptionError::ApiError(format!("Request failed: {}", e))
-            })?;
+        let request = client.post(api_config.transcription_url());
+        let request = api_config.add_auth_header(request);
+
+        let response = request.multipart(form).send().map_err(|e| {
+            eprintln!("[OpenAI Client] API request error: {}", e);
+            TranscriptionError::ApiError(format!("Request failed: {}", e))
+        })?;
 
         // Check response status
         if !response.status().is_success() {
@@ -328,7 +500,6 @@ impl OpenAIClient {
 
         println!("[OpenAI Client] File size: {} bytes", file_size);
 
-        // let model = "gpt-4o-transcribe"; // "whisper-1"
         let model = "whisper-1";
 
         // Build transcription request
@@ -339,7 +510,9 @@ impl OpenAIClient {
             .temperature(0.0)
             .response_format(AudioResponseFormat::Json)
             .build()
-            .map_err(|e| TranscriptionError::ApiError(format!("Failed to build request: {}", e)))?;
+            .map_err(|e| {
+                TranscriptionError::ApiError(format!("Failed to build request: {}", e))
+            })?;
 
         // Call OpenAI API
         println!("[OpenAI Client] Sending request to OpenAI API...");

@@ -1,12 +1,15 @@
 use crate::{
     clients::openai::OpenAIClient,
+    config::{self, Provider},
     keyboard_listener::KeyListener,
+    keychain::{self, KeychainAccount},
     recording::{Controller, RecordingCommand},
     ui::{menu::build_menu, tray::TrayIconState, window},
 };
 use std::sync::{atomic::AtomicU8, Arc, Mutex};
-use tauri::Manager;
 use tauri::ipc::Channel;
+use tauri::Manager;
+use tauri_plugin_store::StoreExt;
 use tokio::sync::mpsc;
 
 pub struct RecordingCommandSender {
@@ -39,12 +42,33 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
     // Initialize OpenAI client (always succeeds, key checked at transcription time)
     let openai_client = OpenAIClient::new();
 
-    // Check if API key is configured
-    let needs_api_key = !OpenAIClient::has_api_key();
-    if needs_api_key {
-        println!("⚠️  No OpenAI API key configured. Opening Preferences...");
+    // Load provider config and check if properly configured
+    let store = app.store("config.json")?;
+    let provider_config = config::load_config(&store);
+
+    // Check if any provider is properly configured
+    let needs_configuration = match &provider_config.enabled_provider {
+        Some(Provider::OpenAI) => {
+            keychain::load_api_key(KeychainAccount::OpenAI)
+                .ok()
+                .flatten()
+                .is_none()
+        }
+        Some(Provider::Azure) => {
+            let has_key = keychain::load_api_key(KeychainAccount::Azure)
+                .ok()
+                .flatten()
+                .is_some();
+            let has_endpoint = provider_config.azure_endpoint.is_some();
+            !has_key || !has_endpoint
+        }
+        None => true,
+    };
+
+    if needs_configuration {
+        println!("⚠️  AI provider not configured. Opening Preferences...");
     } else {
-        println!("✅ OpenAI client initialized successfully");
+        println!("✅ AI provider configured successfully");
     }
 
     // ========================================
@@ -121,8 +145,8 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
     };
     app.manage(tray_state);
 
-    // Open preferences window if no API key is configured
-    if needs_api_key {
+    // Open preferences window if configuration needed
+    if needs_configuration {
         if let Err(e) = window::open_preferences_window(&app.app_handle()) {
             eprintln!("Failed to open preferences window: {}", e);
         }
