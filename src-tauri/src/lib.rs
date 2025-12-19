@@ -3,8 +3,8 @@ mod clipboard_paste;
 mod config;
 mod error;
 mod events;
-mod keychain;
 mod keyboard_listener;
+mod keychain;
 mod recording;
 mod setup;
 mod sound_player;
@@ -17,6 +17,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             return setup::setup_app(app);
         })

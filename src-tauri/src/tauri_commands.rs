@@ -1,6 +1,6 @@
 use crate::config::{self, Provider, ProviderConfig};
 use crate::keychain::{self, KeychainAccount};
-use crate::recording::{RecordingCommand, LastRecordingState};
+use crate::recording::{LastRecordingState, RecordingCommand};
 use crate::setup::{AudioLevelChannel, RecordingCommandSender};
 use tauri::ipc::Channel;
 use tauri::State;
@@ -148,7 +148,10 @@ pub fn test_openai_key(key: String) -> Result<bool, String> {
 
 #[tauri::command]
 pub fn save_azure_key(key: String) -> Result<(), String> {
-    println!("[Command] save_azure_key called with key length: {}", key.len());
+    println!(
+        "[Command] save_azure_key called with key length: {}",
+        key.len()
+    );
     keychain::save_api_key(KeychainAccount::Azure, &key).map_err(|e| {
         let error = format!("Failed to save Azure API key: {}", e);
         eprintln!("[Command] {}", error);

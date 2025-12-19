@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 // Public exports
-pub use audio_recorder::{cleanup_recording_file, Recording, RecorderError};
+pub use audio_recorder::{cleanup_recording_file, RecorderError, Recording};
 pub use commands::RecordingCommand;
 pub use controller::{Controller, RecordingErrorPayload, RecordingStoppedPayload};
 

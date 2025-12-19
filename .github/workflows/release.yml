@@ -1,0 +1,228 @@
+name: "Release"
+
+on:
+  workflow_dispatch:
+    inputs:
+      prerelease:
+        description: "Mark as pre-release (unstable)"
+        required: true
+        default: true
+        type: boolean
+
+env:
+  APP_CARGO_TOML: src-tauri/Cargo.toml
+
+jobs:
+  draft:
+    name: Create Draft Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read_version.outputs.value }}
+      tag_name: ${{ steps.create_tag.outputs.tag_name }}
+      needs_release: ${{ steps.create_tag.outputs.tag_existed != 'true' }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version from Cargo.toml
+        uses: SebRollen/toml-action@v1.0.2
+        id: read_version
+        with:
+          file: ${{ env.APP_CARGO_TOML }}
+          field: "package.version"
+
+      - name: Create tag if not exists
+        id: create_tag
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const version = "${{ steps.read_version.outputs.value }}";
+            const prerelease = ${{ inputs.prerelease }};
+            const tag = prerelease ? `v${version}-dev` : `v${version}`;
+
+            core.setOutput("tag_name", tag);
+
+            try {
+              await github.rest.git.getRef({
+                ref: `tags/${tag}`,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+              });
+              core.setOutput("tag_existed", "true");
+              core.notice(`Tag '${tag}' already exists. Update version in Cargo.toml first.`);
+            } catch (error) {
+              if (error.status === 404) {
+                core.setOutput("tag_existed", "false");
+                await github.rest.git.createRef({
+                  ref: `refs/tags/${tag}`,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  sha: context.sha,
+                });
+              } else {
+                throw error;
+              }
+            }
+
+      - name: Create draft GitHub release
+        if: steps.create_tag.outputs.tag_existed != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: TypeFree v${{ steps.read_version.outputs.value }}
+          tag_name: ${{ steps.create_tag.outputs.tag_name }}
+          draft: true
+          prerelease: ${{ inputs.prerelease }}
+          generate_release_notes: true
+
+  build:
+    name: Build (${{ matrix.settings.target }})
+    needs: draft
+    if: needs.draft.outputs.needs_release == 'true'
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - target: aarch64-apple-darwin
+            runner: macos-latest
+          # - target: x86_64-apple-darwin
+          #   runner: macos-latest
+    runs-on: ${{ matrix.settings.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Apple Code Signing - Create API Key file for notarization
+      - name: Create Apple API Key file
+        env:
+          API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY_FILE }}
+        run: printf '%s\n' "$API_KEY_CONTENT" > api.p8
+
+      # Apple Code Signing - Import certificate
+      - name: Import Apple Certificate
+        uses: apple-actions/import-codesign-certs@v2
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+      # Verify the certificate was imported
+      - name: Verify certificate
+        run: security find-identity -v -p codesigning ${{ runner.temp }}/build.keychain
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: "npm"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.settings.target }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build app
+        run: npm run tauri build -- --target ${{ matrix.settings.target }} --config src-tauri/tauri.prod.conf.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Tauri updater signing
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Apple Code Signing
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # Apple Notarization
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH: ${{ github.workspace }}/api.p8
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.draft.outputs.tag_name }}
+          draft: true
+          files: |
+            src-tauri/target/${{ matrix.settings.target }}/release/bundle/dmg/*.dmg
+            src-tauri/target/${{ matrix.settings.target }}/release/bundle/macos/*.app.tar.gz
+            src-tauri/target/${{ matrix.settings.target }}/release/bundle/macos/*.app.tar.gz.sig
+
+  cleanup:
+    name: Cleanup on Failure
+    needs: [draft, build]
+    if: failure() && needs.draft.outputs.needs_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Delete draft release and tag
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tagName = "${{ needs.draft.outputs.tag_name }}";
+
+            console.log(`Cleaning up failed release for tag: ${tagName}`);
+
+            // Find and delete the draft release
+            try {
+              const releases = await github.rest.repos.listReleases({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+              });
+
+              const draftRelease = releases.data.find(r => r.tag_name === tagName && r.draft);
+
+              if (draftRelease) {
+                await github.rest.repos.deleteRelease({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  release_id: draftRelease.id,
+                });
+                console.log(`Deleted draft release: ${draftRelease.name}`);
+              } else {
+                console.log('No draft release found to delete');
+              }
+            } catch (error) {
+              console.log(`Failed to delete release: ${error.message}`);
+            }
+
+            // Delete the tag
+            try {
+              await github.rest.git.deleteRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `tags/${tagName}`,
+              });
+              console.log(`Deleted tag: ${tagName}`);
+            } catch (error) {
+              console.log(`Failed to delete tag: ${error.message}`);
+            }
+
+# =============================================================================
+# REQUIRED GITHUB SECRETS FOR THIS WORKFLOW:
+# =============================================================================
+#
+# Tauri Updater Signing (generate with: npm run tauri signer generate):
+#   - TAURI_SIGNING_PRIVATE_KEY: Contents of private key file
+#   - TAURI_SIGNING_PRIVATE_KEY_PASSWORD: Password for the key (can be empty)
+#
+# Apple Code Signing:
+#   - APPLE_CERTIFICATE: Base64-encoded .p12 certificate file
+#     Generate: base64 -i Certificates.p12 | pbcopy
+#   - APPLE_CERTIFICATE_PASSWORD: Password for the .p12 file
+#   - APPLE_SIGNING_IDENTITY: Certificate name, e.g., "Developer ID Application: Your Name (TEAM_ID)"
+#
+# Apple Notarization (App Store Connect API):
+#   - APPLE_API_ISSUER: Issuer ID from App Store Connect > Users and Access > Keys
+#   - APPLE_API_KEY: Key ID from App Store Connect
+#   - APPLE_API_KEY_FILE: Contents of the .p8 API key file
+#
+# =============================================================================

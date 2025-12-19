@@ -10,7 +10,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "be:check": "cd src-tauri && cargo check"
+    "be:check": "cd src-tauri && cargo check",
+    "be:format": "cd src-tauri && cargo fmt"
   },
   "dependencies": {
     "@radix-ui/react-collapsible": "^1.1.12",
@@ -21,6 +22,7 @@
     "@tanstack/react-router": "^1.141.2",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-updater": "^2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "ldrs": "^1.1.9",

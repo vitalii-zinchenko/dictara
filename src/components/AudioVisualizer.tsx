@@ -20,7 +20,7 @@ interface AudioVisualizerProps {
  */
 function useBarVolumes(level: number, barCount: number, animationSpeed: number) {
   const [barVolumes, setBarVolumes] = useState<number[]>(Array(barCount).fill(0));
-  const animationFrameRef = useRef<number>();
+  const animationFrameRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     const animate = () => {

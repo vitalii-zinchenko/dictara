@@ -30,4 +30,5 @@ audio
 .env
 
 # TanStack Router generated files
-src/routeTree.gen.ts
+# Note: routeTree.gen.ts is now committed for CI builds
+# src/routeTree.gen.ts

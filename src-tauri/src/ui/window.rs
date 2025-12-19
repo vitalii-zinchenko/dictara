@@ -4,7 +4,7 @@ use tauri::{Manager, Monitor};
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
 const POPUP_WIDTH_NORMAL: u32 = 80;
-const POPUP_WIDTH_ERROR: u32 = 400;  // 5x wider for error display
+const POPUP_WIDTH_ERROR: u32 = 400; // 5x wider for error display
 const POPUP_HEIGHT: u32 = 74;
 const BOTTOM_MARGIN: i32 = 100;
 
@@ -211,10 +211,7 @@ pub fn resize_recording_popup_for_error(app_handle: &tauri::AppHandle) -> Result
     })
 }
 
-fn resize_recording_popup_inner(
-    app_handle: &tauri::AppHandle,
-    width: u32,
-) -> Result<(), AnyError> {
+fn resize_recording_popup_inner(app_handle: &tauri::AppHandle, width: u32) -> Result<(), AnyError> {
     if let Some(window) = app_handle.get_webview_window("recording-popup") {
         // Set new size
         window.set_size(tauri::Size::Logical(tauri::LogicalSize {

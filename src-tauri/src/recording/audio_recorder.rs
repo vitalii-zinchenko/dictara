@@ -64,7 +64,10 @@ impl Recording {
         if let Ok(metadata) = fs::metadata(&file_path) {
             file_size = metadata.len();
             let size_mb = file_size as f64 / (1024.0 * 1024.0);
-            println!("[Recording] File size: {} bytes ({:.2} MB)", file_size, size_mb);
+            println!(
+                "[Recording] File size: {} bytes ({:.2} MB)",
+                file_size, size_mb
+            );
         }
 
         println!(
@@ -124,9 +127,7 @@ impl RecorderError {
             RecorderError::DeviceError => {
                 "Microphone error. Check your audio settings.".to_string()
             }
-            RecorderError::IoError => {
-                "Failed to save recording. Check disk space.".to_string()
-            }
+            RecorderError::IoError => "Failed to save recording. Check disk space.".to_string(),
         }
     }
 }
@@ -174,8 +175,8 @@ impl AudioRecorder {
 
         // Always write 16kHz mono to file (optimal for speech transcription)
         let spec = WavSpec {
-            channels: 1,  // Always mono
-            sample_rate: 16000,  // Always 16kHz
+            channels: 1,        // Always mono
+            sample_rate: 16000, // Always 16kHz
             bits_per_sample: 16,
             sample_format: hound::SampleFormat::Int,
         };
@@ -186,7 +187,11 @@ impl AudioRecorder {
             "[Audio Recorder] Output: {} Hz mono → resampling from {} Hz {}",
             spec.sample_rate,
             config.sample_rate().0,
-            if needs_channel_conversion { "stereo" } else { "mono" }
+            if needs_channel_conversion {
+                "stereo"
+            } else {
+                "mono"
+            }
         );
 
         let writer = WavWriter::create(file_path, spec).map_err(|_| RecorderError::IoError)?;
@@ -197,7 +202,12 @@ impl AudioRecorder {
         let output_rate = 16000;
         let channels = config.channels() as usize;
 
-        let (resampler, required_chunk_size) = match FftFixedInOut::<f32>::new(input_rate, output_rate, 1024, channels) {
+        let (resampler, required_chunk_size) = match FftFixedInOut::<f32>::new(
+            input_rate,
+            output_rate,
+            1024,
+            channels,
+        ) {
             Ok(r) => {
                 // Query the actual input chunk size the resampler needs
                 let input_frames = r.input_frames_next();
@@ -212,25 +222,54 @@ impl AudioRecorder {
 
         // Create sample buffer for accumulating samples before resampling
         // FftFixedInOut requires an exact number of samples (queried above)
-        let sample_buffer: Arc<Mutex<Vec<Vec<f32>>>> = Arc::new(Mutex::new(vec![Vec::new(); channels]));
+        let sample_buffer: Arc<Mutex<Vec<Vec<f32>>>> =
+            Arc::new(Mutex::new(vec![Vec::new(); channels]));
 
         // Build input stream
         let writer_clone = Arc::clone(&writer);
         let err_writer_clone = Arc::clone(&writer);
 
         let stream = match config.sample_format() {
-            cpal::SampleFormat::I8 => {
-                build_input_stream::<i8>(&device, &config.into(), writer_clone, level_channel, resampler.clone(), sample_buffer.clone(), required_chunk_size, needs_channel_conversion)?
-            }
-            cpal::SampleFormat::I16 => {
-                build_input_stream::<i16>(&device, &config.into(), writer_clone, level_channel, resampler.clone(), sample_buffer.clone(), required_chunk_size, needs_channel_conversion)?
-            }
-            cpal::SampleFormat::I32 => {
-                build_input_stream::<i32>(&device, &config.into(), writer_clone, level_channel, resampler.clone(), sample_buffer.clone(), required_chunk_size, needs_channel_conversion)?
-            }
-            cpal::SampleFormat::F32 => {
-                build_input_stream::<f32>(&device, &config.into(), writer_clone, level_channel, resampler.clone(), sample_buffer.clone(), required_chunk_size, needs_channel_conversion)?
-            }
+            cpal::SampleFormat::I8 => build_input_stream::<i8>(
+                &device,
+                &config.into(),
+                writer_clone,
+                level_channel,
+                resampler.clone(),
+                sample_buffer.clone(),
+                required_chunk_size,
+                needs_channel_conversion,
+            )?,
+            cpal::SampleFormat::I16 => build_input_stream::<i16>(
+                &device,
+                &config.into(),
+                writer_clone,
+                level_channel,
+                resampler.clone(),
+                sample_buffer.clone(),
+                required_chunk_size,
+                needs_channel_conversion,
+            )?,
+            cpal::SampleFormat::I32 => build_input_stream::<i32>(
+                &device,
+                &config.into(),
+                writer_clone,
+                level_channel,
+                resampler.clone(),
+                sample_buffer.clone(),
+                required_chunk_size,
+                needs_channel_conversion,
+            )?,
+            cpal::SampleFormat::F32 => build_input_stream::<f32>(
+                &device,
+                &config.into(),
+                writer_clone,
+                level_channel,
+                resampler.clone(),
+                sample_buffer.clone(),
+                required_chunk_size,
+                needs_channel_conversion,
+            )?,
             _ => return Err(RecorderError::DeviceError),
         };
 
@@ -311,7 +350,15 @@ where
     let stream = device.build_input_stream(
         config,
         move |data: &[T], _: &cpal::InputCallbackInfo| {
-            write_input_data::<T>(data, &writer, &level_channel, &resampler, &sample_buffer, required_chunk_size, needs_channel_conversion);
+            write_input_data::<T>(
+                data,
+                &writer,
+                &level_channel,
+                &resampler,
+                &sample_buffer,
+                required_chunk_size,
+                needs_channel_conversion,
+            );
         },
         err_fn,
         None,
@@ -388,9 +435,7 @@ fn write_input_data<T>(
                 }
             };
 
-            let channel_refs: Vec<&[f32]> = channel_chunks.iter()
-                .map(|v| v.as_slice())
-                .collect();
+            let channel_refs: Vec<&[f32]> = channel_chunks.iter().map(|v| v.as_slice()).collect();
 
             match resampler_guard.process(&channel_refs, None) {
                 Ok(resampled) => resampled,
