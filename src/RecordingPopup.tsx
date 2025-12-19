@@ -9,9 +9,18 @@ import "./RecordingPopup.css";
 // Maximum recording duration (10 minutes). Change to 10000 for 10-second testing
 const MAX_RECORDING_DURATION_MS = 10 * 60 * 1000;
 
+interface RecordingErrorPayload {
+  error_type: string;
+  error_message: string;
+  user_message: string;
+  can_retry: boolean;
+  audio_file_path: string | null;
+}
+
 function RecordingPopup() {
   const [recording, setRecording] = useState(true);
   const [transcribing, setTranscribing] = useState(false);
+  const [error, setError] = useState<RecordingErrorPayload | null>(null);
   const [audioLevel, setAudioLevel] = useState(0);
   const [smoothedLevel, setSmoothedLevel] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -55,6 +64,29 @@ function RecordingPopup() {
       await invoke("stop_recording");
     } catch (error) {
       console.error("Failed to stop recording:", error);
+    }
+  };
+
+  const handleRetry = async () => {
+    console.log("Retry clicked");
+    setError(null);
+    setTranscribing(true);
+
+    try {
+      await invoke("retry_transcription");
+    } catch (err) {
+      console.error("Retry failed:", err);
+      // Error will be re-emitted via event
+    }
+  };
+
+  const handleDismiss = async () => {
+    console.log("Dismiss clicked");
+
+    try {
+      await invoke("dismiss_error");
+    } catch (err) {
+      console.error("Failed to dismiss:", err);
     }
   };
 
@@ -128,6 +160,7 @@ function RecordingPopup() {
         console.log("[Popup] Recording started");
         setRecording(true);
         setTranscribing(false);
+        setError(null); // Clear any previous error
         startTimer(); // Start countdown timer
       });
 
@@ -152,11 +185,26 @@ function RecordingPopup() {
         cleanupTimer(); // Stop and reset timer
       });
 
+      const unlistenError = await listen<RecordingErrorPayload>("recording-error", async (event) => {
+        console.log("[Popup] Recording error:", event.payload);
+        setRecording(false);
+        setTranscribing(false);
+        setError(event.payload);
+
+        // Resize window for error display
+        try {
+          await invoke("resize_popup_for_error");
+        } catch (err) {
+          console.error("Failed to resize popup:", err);
+        }
+      });
+
       return () => {
         unlistenStart();
         unlistenTranscribing();
         unlistenStop();
         unlistenCancelled();
+        unlistenError();
         cleanupTimer(); // Clean up timer on unmount
       };
     };
@@ -191,7 +239,54 @@ function RecordingPopup() {
   return (
     <div className="w-screen h-screen rounded-2xl border-[2px] border-gray-600 bg-gray-800 overflow-hidden font-sans">
 
-      { recording &&
+      {/* Error State */}
+      {error && (
+        <div className="flex items-center justify-between w-full h-full px-4 py-3">
+          {/* Error Icon and Message */}
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="flex-1 min-w-0">
+              <div className="text-red-400 text-xs font-semibold mb-0.5">
+                {error.error_type === "recording" ? "Recording Failed" : "Transcription Failed"}
+              </div>
+              <div className="text-gray-300 text-[10px] leading-tight truncate">
+                {error.user_message}
+              </div>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-2 flex-shrink-0 ml-3">
+            {error.can_retry && (
+              <button
+                onClick={handleRetry}
+                className="h-6 px-3 text-xs rounded bg-gray-600 hover:bg-gray-500 text-white font-medium transition-colors flex items-center"
+              >
+                Retry
+              </button>
+            )}
+            <button
+              onClick={handleDismiss}
+              className="w-6 h-6 rounded bg-gray-600 hover:bg-gray-500 flex items-center justify-center transition-colors"
+            >
+              <X className="w-4 h-4 text-white" strokeWidth={2.5} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Transcribing State */}
+      {transcribing && !error && (
+        <div className="flex w-full h-full justify-center items-center">
+          <Mirage
+            size="60"
+            speed="2.5"
+            color="#9ca3af"
+          />
+        </div>
+      )}
+
+      {/* Recording State */}
+      {recording && !error && !transcribing && (
         <div
           className="flex flex-col items-center justify-center w-full h-full bg-gray-800"
           style={{ boxShadow: getInsetShadow(smoothedLevel) }}
@@ -220,17 +315,7 @@ function RecordingPopup() {
             </button>
           </div>
         </div>
-      }
-
-      { transcribing &&
-          <div className="flex w-full h-full justify-center items-center">
-            <Mirage
-              size="60"
-              speed="2.5"
-              color="#9ca3af"
-            />
-          </div>
-      }
+      )}
     </div>
   );
 }

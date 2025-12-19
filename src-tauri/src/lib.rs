@@ -40,7 +40,11 @@ pub fn run() {
             tauri_commands::delete_azure_key,
             tauri_commands::test_azure_key,
             // Audio
-            tauri_commands::register_audio_level_channel
+            tauri_commands::register_audio_level_channel,
+            // Error handling
+            tauri_commands::retry_transcription,
+            tauri_commands::dismiss_error,
+            tauri_commands::resize_popup_for_error
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

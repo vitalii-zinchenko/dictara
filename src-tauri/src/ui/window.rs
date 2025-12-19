@@ -3,7 +3,8 @@ use tauri::{Manager, Monitor};
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
-const POPUP_WIDTH: u32 = 80;
+const POPUP_WIDTH_NORMAL: u32 = 80;
+const POPUP_WIDTH_ERROR: u32 = 400;  // 5x wider for error display
 const POPUP_HEIGHT: u32 = 74;
 const BOTTOM_MARGIN: i32 = 100;
 
@@ -143,7 +144,7 @@ fn open_recording_popup_inner(app_handle: &tauri::AppHandle) -> Result<(), AnyEr
     if let Some(window) = app_handle.get_webview_window("recording-popup") {
         // Set size
         if let Err(e) = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
-            width: POPUP_WIDTH as f64,
+            width: POPUP_WIDTH_NORMAL as f64,
             height: POPUP_HEIGHT as f64,
         })) {
             eprintln!("[Window] Failed to set window size: {}", e);
@@ -165,7 +166,7 @@ fn open_recording_popup_inner(app_handle: &tauri::AppHandle) -> Result<(), AnyEr
             let logical_y = monitor_position.y as f64 / scale_factor;
 
             // Calculate centered horizontal position
-            let x = logical_x + (logical_width - POPUP_WIDTH as f64) / 2.0;
+            let x = logical_x + (logical_width - POPUP_WIDTH_NORMAL as f64) / 2.0;
 
             // Calculate position from bottom
             let y = logical_y + logical_height - POPUP_HEIGHT as f64 - BOTTOM_MARGIN as f64;
@@ -201,6 +202,51 @@ fn close_recording_popup_inner(app_handle: &tauri::AppHandle) -> Result<(), AnyE
     }
 
     Ok(())
+}
+
+pub fn resize_recording_popup_for_error(app_handle: &tauri::AppHandle) -> Result<(), AnyError> {
+    let app_handle_for_closure = app_handle.clone();
+    run_on_main_thread_sync(app_handle, move || {
+        resize_recording_popup_inner(&app_handle_for_closure, POPUP_WIDTH_ERROR)
+    })
+}
+
+fn resize_recording_popup_inner(
+    app_handle: &tauri::AppHandle,
+    width: u32,
+) -> Result<(), AnyError> {
+    if let Some(window) = app_handle.get_webview_window("recording-popup") {
+        // Set new size
+        window.set_size(tauri::Size::Logical(tauri::LogicalSize {
+            width: width as f64,
+            height: POPUP_HEIGHT as f64,
+        }))?;
+
+        // Recalculate centered position
+        let monitor = get_monitor_at_cursor(app_handle)
+            .or_else(|| app_handle.primary_monitor().ok().flatten());
+
+        if let Some(monitor) = monitor {
+            let scale_factor = monitor.scale_factor();
+            let monitor_size = monitor.size();
+            let monitor_position = monitor.position();
+
+            let logical_width = monitor_size.width as f64 / scale_factor;
+            let logical_height = monitor_size.height as f64 / scale_factor;
+            let logical_x = monitor_position.x as f64 / scale_factor;
+            let logical_y = monitor_position.y as f64 / scale_factor;
+
+            // Center horizontally with new width
+            let x = logical_x + (logical_width - width as f64) / 2.0;
+            let y = logical_y + logical_height - POPUP_HEIGHT as f64 - BOTTOM_MARGIN as f64;
+
+            window.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }))?;
+        }
+
+        Ok(())
+    } else {
+        Err("Recording popup window not found".into())
+    }
 }
 
 pub fn open_preferences_window(app_handle: &tauri::AppHandle) -> Result<(), AnyError> {

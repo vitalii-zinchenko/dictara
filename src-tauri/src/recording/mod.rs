@@ -6,9 +6,9 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 // Public exports
-pub use audio_recorder::{Recording, RecorderError};
+pub use audio_recorder::{cleanup_recording_file, Recording, RecorderError};
 pub use commands::RecordingCommand;
-pub use controller::Controller;
+pub use controller::{Controller, RecordingErrorPayload, RecordingStoppedPayload};
 
 /// Stores the last recording attempt for paste retry functionality
 #[derive(Debug, Clone)]

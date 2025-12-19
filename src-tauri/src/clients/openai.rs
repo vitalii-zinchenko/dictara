@@ -58,6 +58,51 @@ impl std::fmt::Display for TranscriptionError {
     }
 }
 
+impl TranscriptionError {
+    /// Returns a user-friendly error message suitable for display in the UI
+    pub fn user_message(&self) -> String {
+        match self {
+            TranscriptionError::AudioTooShort { duration_ms } => {
+                format!(
+                    "Recording too short ({}ms). Please speak for at least 0.5 seconds.",
+                    duration_ms
+                )
+            }
+            TranscriptionError::FileTooLarge { size_bytes } => {
+                let mb = size_bytes / (1024 * 1024);
+                format!("Audio file too large ({}MB). Maximum is 25MB.", mb)
+            }
+            TranscriptionError::FileNotFound(_) => {
+                "Audio file not found. Please try recording again.".to_string()
+            }
+            TranscriptionError::ApiError(msg) => {
+                // Parse for specific errors
+                if msg.contains("429") || msg.to_lowercase().contains("rate limit") {
+                    "Rate limit reached. Please wait and retry.".to_string()
+                } else if msg.contains("401") {
+                    "Invalid API key. Check your settings.".to_string()
+                } else {
+                    format!("Transcription failed: {}", msg)
+                }
+            }
+            TranscriptionError::IoError(_) => {
+                "Failed to read audio file. Please try again.".to_string()
+            }
+            TranscriptionError::ApiKeyMissing => {
+                "API key not configured. Please add it in Preferences.".to_string()
+            }
+        }
+    }
+
+    /// Returns true if this error can be retried
+    pub fn can_retry(&self) -> bool {
+        matches!(
+            self,
+            TranscriptionError::ApiError(_) | TranscriptionError::FileNotFound(_)
+        )
+    }
+}
+
 /// Configuration for making API calls
 #[derive(Debug, Clone)]
 pub struct ApiConfig {

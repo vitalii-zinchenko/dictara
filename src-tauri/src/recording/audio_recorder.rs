@@ -114,6 +114,23 @@ impl From<cpal::PauseStreamError> for RecorderError {
     }
 }
 
+impl RecorderError {
+    /// Returns a user-friendly error message suitable for display in the UI
+    pub fn user_message(&self) -> String {
+        match self {
+            RecorderError::NoInputDevice => {
+                "No microphone found. Please connect one and try again.".to_string()
+            }
+            RecorderError::DeviceError => {
+                "Microphone error. Check your audio settings.".to_string()
+            }
+            RecorderError::IoError => {
+                "Failed to save recording. Check disk space.".to_string()
+            }
+        }
+    }
+}
+
 impl AudioRecorder {
     /// Create a new AudioRecorder
     pub fn new(app_handle: tauri::AppHandle) -> Self {

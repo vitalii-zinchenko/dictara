@@ -10,4 +10,6 @@ pub enum RecordingCommand {
     Lock,
     /// Cancel the current recording without transcribing
     Cancel,
+    /// Retry transcription of the last failed recording
+    RetryTranscription,
 }

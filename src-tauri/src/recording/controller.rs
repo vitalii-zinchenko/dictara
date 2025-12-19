@@ -22,6 +22,16 @@ pub struct RecordingStoppedPayload {
     pub text: String,
 }
 
+// Event payload for recording-error
+#[derive(Clone, Serialize)]
+pub struct RecordingErrorPayload {
+    pub error_type: String,      // "recording" | "transcription"
+    pub error_message: String,   // Technical error for debugging
+    pub user_message: String,    // User-friendly message
+    pub can_retry: bool,         // Show retry button?
+    pub audio_file_path: Option<String>,  // For retry
+}
+
 #[derive(PartialEq, Debug, Copy, Clone)]
 enum ControllerState {
     /// Controller is ready to start recording
@@ -145,6 +155,12 @@ impl Controller {
                         self.set_state(ControllerState::Ready);
                     }
                 }
+                RecordingCommand::RetryTranscription => {
+                    println!("[Controller] Received RetryTranscription command");
+                    if let Err(e) = self.handle_retry_transcription() {
+                        eprintln!("[Controller] Error retrying transcription: {:?}", e);
+                    }
+                }
             }
         }
 
@@ -172,7 +188,27 @@ impl Controller {
         // Get the audio level channel if one is registered
         let level_channel = self.audio_level_channel.lock().unwrap().clone();
 
-        let recording = self.audio_recorder.start(level_channel)?;
+        let recording = match self.audio_recorder.start(level_channel) {
+            Ok(rec) => rec,
+            Err(e) => {
+                eprintln!("[Controller] Error starting recording: {:?}", e);
+
+                // Emit error event to frontend
+                let error_payload = RecordingErrorPayload {
+                    error_type: "recording".to_string(),
+                    error_message: format!("{:?}", e),
+                    user_message: e.user_message(),
+                    can_retry: false,  // Recording errors cannot be retried
+                    audio_file_path: None,
+                };
+
+                if let Err(emit_err) = self.app_handle.emit("recording-error", error_payload) {
+                    eprintln!("[Controller] Failed to emit recording-error event: {}", emit_err);
+                }
+
+                return Err(Error::from(e));
+            }
+        };
 
         Ok(recording)
     }
@@ -252,6 +288,8 @@ impl Controller {
                 Ok(())
             }
             Err(e) => {
+                eprintln!("[Controller] Transcription error: {}", e);
+
                 // Update last recording state with failed transcription
                 // Keep the audio file for retry
                 if let Ok(mut last_recording) = self.last_recording_state.lock() {
@@ -261,18 +299,27 @@ impl Controller {
                 }
 
                 // Disable the paste menu item since there's no text to paste
-                if let Err(e) = crate::ui::tray::update_paste_menu_item(&self.app_handle, false) {
-                    eprintln!("[Controller] Failed to disable paste menu item: {}", e);
+                if let Err(err) = crate::ui::tray::update_paste_menu_item(&self.app_handle, false) {
+                    eprintln!("[Controller] Failed to disable paste menu item: {}", err);
                 }
 
                 // Restore tray icon to default state
-                if let Err(e) = crate::ui::tray::set_default_icon(&self.app_handle) {
-                    eprintln!("[Controller] Failed to set default icon: {}", e);
+                if let Err(err) = crate::ui::tray::set_default_icon(&self.app_handle) {
+                    eprintln!("[Controller] Failed to set default icon: {}", err);
                 }
 
-                // Hide recording popup window
-                if let Err(e) = close_recording_popup(&self.app_handle) {
-                    eprintln!("[Controller] Failed to close recording popup: {}", e);
+                // DON'T close popup - keep it open to show error
+                // Emit error event to frontend
+                let error_payload = RecordingErrorPayload {
+                    error_type: "transcription".to_string(),
+                    error_message: format!("{}", e),
+                    user_message: e.user_message(),
+                    can_retry: e.can_retry(),
+                    audio_file_path: Some(recording_result.file_path.clone()),
+                };
+
+                if let Err(emit_err) = self.app_handle.emit("recording-error", error_payload) {
+                    eprintln!("[Controller] Failed to emit recording-error event: {}", emit_err);
                 }
 
                 Err(Error::from(e))
@@ -304,6 +351,131 @@ impl Controller {
 
         println!("[Controller] Recording cancelled successfully");
         Ok(())
+    }
+
+    fn handle_retry_transcription(&self) -> Result<(), Error> {
+        println!("[Controller] Retrying transcription");
+
+        // Get audio file path from last recording state
+        let (audio_file_path, duration_ms) = {
+            let last_recording = self.last_recording_state.lock()
+                .map_err(|e| Error::from(crate::clients::openai::TranscriptionError::ApiError(
+                    format!("Failed to lock state: {}", e)
+                )))?;
+
+            let path = last_recording.audio_file_path.clone()
+                .ok_or_else(|| Error::from(crate::clients::openai::TranscriptionError::ApiError(
+                    "No audio file available for retry".to_string()
+                )))?;
+
+            // Estimate duration from file size: ~32KB per second for 16kHz mono 16-bit
+            let metadata = std::fs::metadata(&path)
+                .map_err(|e| Error::from(crate::clients::openai::TranscriptionError::FileNotFound(
+                    format!("File not found: {}", e)
+                )))?;
+            let duration_ms = (metadata.len() * 1000) / 32000;
+
+            (path, duration_ms)
+        };
+
+        // Emit transcribing event
+        println!("[Controller] Emitting recording-transcribing event for retry");
+        self.app_handle.emit("recording-transcribing", ())?;
+
+        // Load provider config
+        let store = match self.app_handle.store("config.json") {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[Controller] Failed to load config store: {}", e);
+                return Err(Error::from(crate::clients::openai::TranscriptionError::ApiError(
+                    format!("Failed to load config: {}", e),
+                )));
+            }
+        };
+        let provider_config = config::load_config(&store);
+
+        // Transcribe with loaded config
+        let transcription_result = self.openai_client.transcribe_audio_sync(
+            PathBuf::from(&audio_file_path),
+            duration_ms,
+            &provider_config,
+        );
+
+        match transcription_result {
+            Ok(text) => {
+                // Clean up recording file after successful transcription
+                cleanup_recording_file(&audio_file_path);
+
+                if !text.is_empty() {
+                    crate::clipboard_paste::auto_paste_text_cgevent(&text)?;
+                }
+
+                // Update last recording state with successful transcription
+                if let Ok(mut last_recording) = self.last_recording_state.lock() {
+                    last_recording.text = Some(text.clone());
+                    last_recording.timestamp = Some(std::time::SystemTime::now());
+                    last_recording.audio_file_path = None;
+                }
+
+                // Enable the paste menu item
+                if let Err(e) = crate::ui::tray::update_paste_menu_item(&self.app_handle, true) {
+                    eprintln!("[Controller] Failed to enable paste menu item: {}", e);
+                }
+
+                // Restore tray icon to default state
+                if let Err(e) = crate::ui::tray::set_default_icon(&self.app_handle) {
+                    eprintln!("[Controller] Failed to set default icon: {}", e);
+                }
+
+                // Hide recording popup window
+                if let Err(e) = close_recording_popup(&self.app_handle) {
+                    eprintln!("[Controller] Failed to close recording popup: {}", e);
+                }
+
+                self.app_handle.emit(
+                    "recording-stopped",
+                    RecordingStoppedPayload { text: text.clone() },
+                )?;
+
+                Ok(())
+            }
+            Err(e) => {
+                eprintln!("[Controller] Retry transcription error: {}", e);
+
+                // Update last recording state - keep audio file for another retry
+                if let Ok(mut last_recording) = self.last_recording_state.lock() {
+                    last_recording.text = None;
+                    last_recording.timestamp = None;
+                    last_recording.audio_file_path = Some(audio_file_path.clone());
+                }
+
+                // Disable the paste menu item since there's no text to paste
+                if let Err(err) = crate::ui::tray::update_paste_menu_item(&self.app_handle, false) {
+                    eprintln!("[Controller] Failed to disable paste menu item: {}", err);
+                }
+
+                // Restore tray icon to default state
+                if let Err(err) = crate::ui::tray::set_default_icon(&self.app_handle) {
+                    eprintln!("[Controller] Failed to set default icon: {}", err);
+                }
+
+                // DON'T close popup - keep it open to show error
+                // Emit error event to frontend
+                let error_payload = RecordingErrorPayload {
+                    error_type: "transcription".to_string(),
+                    error_message: format!("{}", e),
+                    user_message: e.user_message(),
+                    can_retry: e.can_retry(),
+                    audio_file_path: Some(audio_file_path),
+                };
+
+                if let Err(emit_err) = self.app_handle.emit("recording-error", error_payload) {
+                    eprintln!("[Controller] Failed to emit recording-error event: {}", emit_err);
+                }
+
+                Err(Error::from(e))
+            }
+        }
     }
 
     fn set_state(&mut self, new_state: ControllerState) {

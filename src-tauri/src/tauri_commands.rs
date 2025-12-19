@@ -1,6 +1,6 @@
 use crate::config::{self, Provider, ProviderConfig};
 use crate::keychain::{self, KeychainAccount};
-use crate::recording::RecordingCommand;
+use crate::recording::{RecordingCommand, LastRecordingState};
 use crate::setup::{AudioLevelChannel, RecordingCommandSender};
 use tauri::ipc::Channel;
 use tauri::State;
@@ -199,4 +199,46 @@ pub fn register_audio_level_channel(
     let mut channel_lock = state.channel.lock().unwrap();
     *channel_lock = Some(channel);
     Ok(())
+}
+
+// ===== ERROR HANDLING =====
+
+#[tauri::command]
+pub fn retry_transcription(sender: State<RecordingCommandSender>) -> Result<(), String> {
+    println!("[Command] retry_transcription called");
+
+    sender
+        .sender
+        .blocking_send(RecordingCommand::RetryTranscription)
+        .map_err(|e| format!("Failed to send RetryTranscription command: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn dismiss_error(
+    app: tauri::AppHandle,
+    last_recording_state: State<LastRecordingState>,
+) -> Result<(), String> {
+    println!("[Command] dismiss_error called");
+
+    // Delete audio file if exists
+    if let Ok(mut last_recording) = last_recording_state.lock() {
+        if let Some(path) = last_recording.audio_file_path.take() {
+            crate::recording::cleanup_recording_file(&path);
+        }
+        last_recording.audio_file_path = None;
+    }
+
+    // Close popup
+    crate::ui::window::close_recording_popup(&app)
+        .map_err(|e| format!("Failed to close popup: {}", e))
+}
+
+#[tauri::command]
+pub fn resize_popup_for_error(app: tauri::AppHandle) -> Result<(), String> {
+    println!("[Command] resize_popup_for_error called");
+
+    crate::ui::window::resize_recording_popup_for_error(&app)
+        .map_err(|e| format!("Failed to resize popup: {}", e))
 }
