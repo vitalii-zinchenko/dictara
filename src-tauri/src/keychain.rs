@@ -33,7 +33,10 @@ pub fn save_api_key(account: KeychainAccount, key: &str) -> Result<(), keyring::
             Ok(())
         }
         Err(e) => {
-            eprintln!("[Keychain] ❌ Failed to save API key ({}): {:?}", account_name, e);
+            eprintln!(
+                "[Keychain] ❌ Failed to save API key ({}): {:?}",
+                account_name, e
+            );
             Err(e)
         }
     }
@@ -42,7 +45,10 @@ pub fn save_api_key(account: KeychainAccount, key: &str) -> Result<(), keyring::
 pub fn load_api_key(account: KeychainAccount) -> Result<Option<String>, keyring::Error> {
     let account_name = account.as_str();
     println!("[Keychain] Attempting to load API key ({})", account_name);
-    println!("[Keychain] Service: '{}', Account: '{}'", SERVICE, account_name);
+    println!(
+        "[Keychain] Service: '{}', Account: '{}'",
+        SERVICE, account_name
+    );
 
     let entry = Entry::new(SERVICE, account_name)?;
 
@@ -56,11 +62,17 @@ pub fn load_api_key(account: KeychainAccount) -> Result<Option<String>, keyring:
             Ok(Some(password))
         }
         Err(keyring::Error::NoEntry) => {
-            println!("[Keychain] ℹ️  No API key found in keychain ({})", account_name);
+            println!(
+                "[Keychain] ℹ️  No API key found in keychain ({})",
+                account_name
+            );
             Ok(None)
         }
         Err(e) => {
-            eprintln!("[Keychain] ❌ Error loading API key ({}): {:?}", account_name, e);
+            eprintln!(
+                "[Keychain] ❌ Error loading API key ({}): {:?}",
+                account_name, e
+            );
             Err(e)
         }
     }
@@ -74,15 +86,24 @@ pub fn delete_api_key(account: KeychainAccount) -> Result<(), keyring::Error> {
 
     match entry.delete_credential() {
         Ok(()) => {
-            println!("[Keychain] ✅ API key deleted successfully ({})", account_name);
+            println!(
+                "[Keychain] ✅ API key deleted successfully ({})",
+                account_name
+            );
             Ok(())
         }
         Err(keyring::Error::NoEntry) => {
-            println!("[Keychain] ℹ️  No API key to delete (not found, {})", account_name);
+            println!(
+                "[Keychain] ℹ️  No API key to delete (not found, {})",
+                account_name
+            );
             Ok(())
         }
         Err(e) => {
-            eprintln!("[Keychain] ❌ Error deleting API key ({}): {:?}", account_name, e);
+            eprintln!(
+                "[Keychain] ❌ Error deleting API key ({}): {:?}",
+                account_name, e
+            );
             Err(e)
         }
     }

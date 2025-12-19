@@ -7,19 +7,19 @@ use std::thread::{self, JoinHandle};
 use tokio::sync::mpsc;
 
 #[cfg(target_os = "macos")]
-use objc2_core_foundation::{CFMachPort, CFRunLoop, kCFRunLoopCommonModes};
+use objc2_core_foundation::{kCFRunLoopCommonModes, CFMachPort, CFRunLoop};
 #[cfg(target_os = "macos")]
 use objc2_core_graphics::{
-    CGEvent, CGEventField, CGEventTapCallBack, CGEventTapLocation, CGEventTapOptions,
-    CGEventTapPlacement, CGEventTapProxy, CGEventType, kCGEventMaskForAllEvents,
+    kCGEventMaskForAllEvents, CGEvent, CGEventField, CGEventTapCallBack, CGEventTapLocation,
+    CGEventTapOptions, CGEventTapPlacement, CGEventTapProxy, CGEventType,
 };
 #[cfg(target_os = "macos")]
 use std::{ffi::c_void, ptr::NonNull};
 
-#[cfg(target_os = "macos")]
-use rdev::{listen, EventType, Key};
 #[cfg(any(not(target_os = "macos")))]
 use rdev::{listen, Event, EventType, Key, ListenError};
+#[cfg(target_os = "macos")]
+use rdev::{listen, EventType, Key};
 
 /// Stateful FN key listener
 pub struct KeyListener {
@@ -55,19 +55,17 @@ impl KeyListener {
                     "[FN Key Listener] CGEvent tap failed: {}. Falling back to rdev::listen (emoji picker may appear).",
                     err
                 );
-                if let Err(listen_err) = listen(move |event: rdev::Event| {
-                    match event.event_type {
-                        EventType::KeyPress(Key::Function) => {
-                            let _ = command_tx.blocking_send(RecordingCommand::FnDown);
-                        }
-                        EventType::KeyRelease(Key::Function) => {
-                            let _ = command_tx.blocking_send(RecordingCommand::FnUp);
-                        }
-                        EventType::KeyPress(Key::Space) => {
-                            let _ = command_tx.blocking_send(RecordingCommand::Lock);
-                        }
-                        _ => {}
+                if let Err(listen_err) = listen(move |event: rdev::Event| match event.event_type {
+                    EventType::KeyPress(Key::Function) => {
+                        let _ = command_tx.blocking_send(RecordingCommand::FnDown);
                     }
+                    EventType::KeyRelease(Key::Function) => {
+                        let _ = command_tx.blocking_send(RecordingCommand::FnUp);
+                    }
+                    EventType::KeyPress(Key::Space) => {
+                        let _ = command_tx.blocking_send(RecordingCommand::Lock);
+                    }
+                    _ => {}
                 }) {
                     eprintln!(
                         "[FN Key Listener] rdev::listen fallback failed: {:?}",
@@ -139,10 +137,8 @@ unsafe extern "C-unwind" fn tap_callback(
 
     let state = &mut *(user_info as *mut CallbackState);
 
-    let keycode = CGEvent::integer_value_field(
-        Some(cg_event.as_ref()),
-        CGEventField::KeyboardEventKeycode,
-    );
+    let keycode =
+        CGEvent::integer_value_field(Some(cg_event.as_ref()), CGEventField::KeyboardEventKeycode);
 
     match event_type {
         CGEventType::KeyDown => {
@@ -212,8 +208,8 @@ fn run_event_tap(
         let loop_source = CFMachPort::new_run_loop_source(None, Some(&tap), 0)
             .ok_or_else(|| "Failed to create run loop source for event tap".to_string())?;
 
-        let current_loop = CFRunLoop::current()
-            .ok_or_else(|| "Failed to get current CFRunLoop".to_string())?;
+        let current_loop =
+            CFRunLoop::current().ok_or_else(|| "Failed to get current CFRunLoop".to_string())?;
 
         current_loop.add_source(Some(&loop_source), kCFRunLoopCommonModes);
 

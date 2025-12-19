@@ -12,7 +12,11 @@ use tokio::sync::mpsc::Receiver;
 use crate::clients::openai::OpenAIClient;
 use crate::config;
 use crate::error::Error;
-use crate::recording::{audio_recorder::{AudioRecorder, cleanup_recording_file}, commands::RecordingCommand, Recording, LastRecordingState};
+use crate::recording::{
+    audio_recorder::{cleanup_recording_file, AudioRecorder},
+    commands::RecordingCommand,
+    LastRecordingState, Recording,
+};
 use crate::sound_player;
 use crate::ui::window::{close_recording_popup, open_recording_popup};
 
@@ -25,11 +29,11 @@ pub struct RecordingStoppedPayload {
 // Event payload for recording-error
 #[derive(Clone, Serialize)]
 pub struct RecordingErrorPayload {
-    pub error_type: String,      // "recording" | "transcription"
-    pub error_message: String,   // Technical error for debugging
-    pub user_message: String,    // User-friendly message
-    pub can_retry: bool,         // Show retry button?
-    pub audio_file_path: Option<String>,  // For retry
+    pub error_type: String,              // "recording" | "transcription"
+    pub error_message: String,           // Technical error for debugging
+    pub user_message: String,            // User-friendly message
+    pub can_retry: bool,                 // Show retry button?
+    pub audio_file_path: Option<String>, // For retry
 }
 
 #[derive(PartialEq, Debug, Copy, Clone)]
@@ -198,12 +202,15 @@ impl Controller {
                     error_type: "recording".to_string(),
                     error_message: format!("{:?}", e),
                     user_message: e.user_message(),
-                    can_retry: false,  // Recording errors cannot be retried
+                    can_retry: false, // Recording errors cannot be retried
                     audio_file_path: None,
                 };
 
                 if let Err(emit_err) = self.app_handle.emit("recording-error", error_payload) {
-                    eprintln!("[Controller] Failed to emit recording-error event: {}", emit_err);
+                    eprintln!(
+                        "[Controller] Failed to emit recording-error event: {}",
+                        emit_err
+                    );
                 }
 
                 return Err(Error::from(e));
@@ -235,9 +242,12 @@ impl Controller {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("[Controller] Failed to load config store: {}", e);
-                return Err(Error::from(crate::clients::openai::TranscriptionError::ApiError(
-                    format!("Failed to load config: {}", e),
-                )));
+                return Err(Error::from(
+                    crate::clients::openai::TranscriptionError::ApiError(format!(
+                        "Failed to load config: {}",
+                        e
+                    )),
+                ));
             }
         };
         let provider_config = config::load_config(&store);
@@ -319,7 +329,10 @@ impl Controller {
                 };
 
                 if let Err(emit_err) = self.app_handle.emit("recording-error", error_payload) {
-                    eprintln!("[Controller] Failed to emit recording-error event: {}", emit_err);
+                    eprintln!(
+                        "[Controller] Failed to emit recording-error event: {}",
+                        emit_err
+                    );
                 }
 
                 Err(Error::from(e))
@@ -358,21 +371,24 @@ impl Controller {
 
         // Get audio file path from last recording state
         let (audio_file_path, duration_ms) = {
-            let last_recording = self.last_recording_state.lock()
-                .map_err(|e| Error::from(crate::clients::openai::TranscriptionError::ApiError(
-                    format!("Failed to lock state: {}", e)
-                )))?;
+            let last_recording = self.last_recording_state.lock().map_err(|e| {
+                Error::from(crate::clients::openai::TranscriptionError::ApiError(
+                    format!("Failed to lock state: {}", e),
+                ))
+            })?;
 
-            let path = last_recording.audio_file_path.clone()
-                .ok_or_else(|| Error::from(crate::clients::openai::TranscriptionError::ApiError(
-                    "No audio file available for retry".to_string()
-                )))?;
+            let path = last_recording.audio_file_path.clone().ok_or_else(|| {
+                Error::from(crate::clients::openai::TranscriptionError::ApiError(
+                    "No audio file available for retry".to_string(),
+                ))
+            })?;
 
             // Estimate duration from file size: ~32KB per second for 16kHz mono 16-bit
-            let metadata = std::fs::metadata(&path)
-                .map_err(|e| Error::from(crate::clients::openai::TranscriptionError::FileNotFound(
-                    format!("File not found: {}", e)
-                )))?;
+            let metadata = std::fs::metadata(&path).map_err(|e| {
+                Error::from(crate::clients::openai::TranscriptionError::FileNotFound(
+                    format!("File not found: {}", e),
+                ))
+            })?;
             let duration_ms = (metadata.len() * 1000) / 32000;
 
             (path, duration_ms)
@@ -387,9 +403,12 @@ impl Controller {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("[Controller] Failed to load config store: {}", e);
-                return Err(Error::from(crate::clients::openai::TranscriptionError::ApiError(
-                    format!("Failed to load config: {}", e),
-                )));
+                return Err(Error::from(
+                    crate::clients::openai::TranscriptionError::ApiError(format!(
+                        "Failed to load config: {}",
+                        e
+                    )),
+                ));
             }
         };
         let provider_config = config::load_config(&store);
@@ -470,7 +489,10 @@ impl Controller {
                 };
 
                 if let Err(emit_err) = self.app_handle.emit("recording-error", error_payload) {
-                    eprintln!("[Controller] Failed to emit recording-error event: {}", emit_err);
+                    eprintln!(
+                        "[Controller] Failed to emit recording-error event: {}",
+                        emit_err
+                    );
                 }
 
                 Err(Error::from(e))

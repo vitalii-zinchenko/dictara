@@ -24,15 +24,14 @@ pub fn play_stop() {
 }
 
 fn play_sound(sound_data: &'static [u8], volume: f32) -> Result<(), String> {
-    let (_stream, stream_handle) = OutputStream::try_default()
-        .map_err(|e| format!("Failed to get output stream: {}", e))?;
+    let (_stream, stream_handle) =
+        OutputStream::try_default().map_err(|e| format!("Failed to get output stream: {}", e))?;
 
     let cursor = Cursor::new(sound_data);
-    let source = Decoder::new(cursor)
-        .map_err(|e| format!("Failed to decode sound: {}", e))?;
+    let source = Decoder::new(cursor).map_err(|e| format!("Failed to decode sound: {}", e))?;
 
-    let sink = Sink::try_new(&stream_handle)
-        .map_err(|e| format!("Failed to create sink: {}", e))?;
+    let sink =
+        Sink::try_new(&stream_handle).map_err(|e| format!("Failed to create sink: {}", e))?;
 
     sink.set_volume(volume);
     sink.append(source);

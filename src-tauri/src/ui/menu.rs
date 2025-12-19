@@ -9,9 +9,10 @@ pub fn build_menu(app: &App<Wry>) -> Result<MenuWithItems, Box<dyn std::error::E
     // Build menu items
     let preferences_item =
         tauri::menu::MenuItemBuilder::with_id("preferences", "Preferences").build(app)?;
-    let paste_last_item = tauri::menu::MenuItemBuilder::with_id("paste_last_recording", "Paste Last Recording")
-        .enabled(false) // Initially disabled until first recording
-        .build(app)?;
+    let paste_last_item =
+        tauri::menu::MenuItemBuilder::with_id("paste_last_recording", "Paste Last Recording")
+            .enabled(false) // Initially disabled until first recording
+            .build(app)?;
     let quit_item = tauri::menu::MenuItemBuilder::with_id("quit", "Quit").build(app)?;
 
     // Build menu

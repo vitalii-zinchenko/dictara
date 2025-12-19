@@ -3,8 +3,12 @@ use crate::{
     config::{self, Provider},
     keyboard_listener::KeyListener,
     keychain::{self, KeychainAccount},
-    recording::{Controller, RecordingCommand, LastRecording, LastRecordingState},
-    ui::{menu::build_menu, tray::{TrayIconState, PasteMenuItemState}, window},
+    recording::{Controller, LastRecording, LastRecordingState, RecordingCommand},
+    ui::{
+        menu::build_menu,
+        tray::{PasteMenuItemState, TrayIconState},
+        window,
+    },
 };
 use std::sync::{atomic::AtomicU8, Arc, Mutex};
 use tauri::ipc::Channel;
@@ -48,12 +52,10 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
 
     // Check if any provider is properly configured
     let needs_configuration = match &provider_config.enabled_provider {
-        Some(Provider::OpenAI) => {
-            keychain::load_api_key(KeychainAccount::OpenAI)
-                .ok()
-                .flatten()
-                .is_none()
-        }
+        Some(Provider::OpenAI) => keychain::load_api_key(KeychainAccount::OpenAI)
+            .ok()
+            .flatten()
+            .is_none(),
         Some(Provider::Azure) => {
             let has_key = keychain::load_api_key(KeychainAccount::Azure)
                 .ok()
@@ -145,7 +147,9 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
                         if let Ok(last_recording) = state.lock() {
                             if let Some(text) = &last_recording.text {
                                 // Paste the last recording
-                                if let Err(e) = crate::clipboard_paste::auto_paste_text_cgevent(text) {
+                                if let Err(e) =
+                                    crate::clipboard_paste::auto_paste_text_cgevent(text)
+                                {
                                     eprintln!("Failed to paste last recording: {:?}", e);
                                 }
                             } else {

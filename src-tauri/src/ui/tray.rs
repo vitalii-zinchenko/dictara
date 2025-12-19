@@ -47,8 +47,8 @@ pub fn set_recording_icon(app_handle: &tauri::AppHandle) -> Result<(), TrayError
     const RECORDING_ICON_BYTES: &[u8] = include_bytes!("../../icons/recording.png");
 
     // Decode PNG to RGBA
-    let img = image::load_from_memory(RECORDING_ICON_BYTES)
-        .map_err(|_| TrayError::IconDecodeFailed)?;
+    let img =
+        image::load_from_memory(RECORDING_ICON_BYTES).map_err(|_| TrayError::IconDecodeFailed)?;
 
     let rgba = img.to_rgba8();
     let (width, height) = rgba.dimensions();
@@ -86,16 +86,19 @@ pub fn set_default_icon(app_handle: &tauri::AppHandle) -> Result<(), TrayError> 
 }
 
 /// Updates the "Paste Last Recording" menu item enabled state
-pub fn update_paste_menu_item(app_handle: &tauri::AppHandle, enabled: bool) -> Result<(), TrayError> {
+pub fn update_paste_menu_item(
+    app_handle: &tauri::AppHandle,
+    enabled: bool,
+) -> Result<(), TrayError> {
     println!("[Tray] Updating paste menu item - enabled: {}", enabled);
 
     let state = app_handle
         .try_state::<PasteMenuItemState>()
         .ok_or(TrayError::StateNotFound)?;
 
-    state.item
-        .set_enabled(enabled)
-        .map_err(|e| TrayError::IconSetFailed(format!("Failed to set menu item enabled state: {}", e)))?;
+    state.item.set_enabled(enabled).map_err(|e| {
+        TrayError::IconSetFailed(format!("Failed to set menu item enabled state: {}", e))
+    })?;
 
     println!("[Tray]  Paste menu item updated successfully");
     Ok(())
