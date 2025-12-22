@@ -6,22 +6,20 @@ on:
       prerelease:
         description: "Mark as pre-release (unstable)"
         required: true
-        default: true
+        default: false
         type: boolean
 
 env:
   APP_CARGO_TOML: src-tauri/Cargo.toml
 
 jobs:
-  draft:
-    name: Create Draft Release
+  # First job: read version to determine tag name (needed for cleanup)
+  prepare:
+    name: Prepare Release
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.read_version.outputs.value }}
-      tag_name: ${{ steps.create_tag.outputs.tag_name }}
-      needs_release: ${{ steps.create_tag.outputs.tag_existed != 'true' }}
-    permissions:
-      contents: write
+      tag_name: ${{ steps.set_tag.outputs.tag_name }}
     steps:
       - uses: actions/checkout@v4
 
@@ -32,64 +30,26 @@ jobs:
           file: ${{ env.APP_CARGO_TOML }}
           field: "package.version"
 
-      - name: Create tag if not exists
-        id: create_tag
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const version = "${{ steps.read_version.outputs.value }}";
-            const prerelease = ${{ inputs.prerelease }};
-            const tag = prerelease ? `v${version}-dev` : `v${version}`;
+      - name: Set tag name
+        id: set_tag
+        run: echo "tag_name=v${{ steps.read_version.outputs.value }}" >> $GITHUB_OUTPUT
 
-            core.setOutput("tag_name", tag);
-
-            try {
-              await github.rest.git.getRef({
-                ref: `tags/${tag}`,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-              });
-              core.setOutput("tag_existed", "true");
-              core.notice(`Tag '${tag}' already exists. Update version in Cargo.toml first.`);
-            } catch (error) {
-              if (error.status === 404) {
-                core.setOutput("tag_existed", "false");
-                await github.rest.git.createRef({
-                  ref: `refs/tags/${tag}`,
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  sha: context.sha,
-                });
-              } else {
-                throw error;
-              }
-            }
-
-      - name: Create draft GitHub release
-        if: steps.create_tag.outputs.tag_existed != 'true'
-        uses: softprops/action-gh-release@v2
-        with:
-          name: Dictara v${{ steps.read_version.outputs.value }}
-          tag_name: ${{ steps.create_tag.outputs.tag_name }}
-          draft: true
-          prerelease: ${{ inputs.prerelease }}
-          generate_release_notes: true
-
-  build:
-    name: Build (${{ matrix.settings.target }})
-    needs: draft
-    if: needs.draft.outputs.needs_release == 'true'
+  # Second job: build and release
+  publish-tauri:
+    name: Build and Release
+    needs: prepare
     permissions:
       contents: write
     strategy:
       fail-fast: false
       matrix:
-        settings:
-          - target: aarch64-apple-darwin
-            runner: macos-latest
-          # - target: x86_64-apple-darwin
-          #   runner: macos-latest
-    runs-on: ${{ matrix.settings.runner }}
+        include:
+          - platform: macos-latest
+            args: --target aarch64-apple-darwin
+          # Uncomment to add Intel Mac support
+          # - platform: macos-latest
+          #   args: --target x86_64-apple-darwin
+    runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
 
@@ -116,10 +76,10 @@ jobs:
           node-version: lts/*
           cache: "npm"
 
-      - name: Install Rust
+      - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.settings.target }}
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -129,8 +89,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build app
-        run: npm run tauri build -- --target ${{ matrix.settings.target }} --config src-tauri/tauri.prod.conf.json
+      # Use tauri-action to build and create release with latest.json
+      - name: Build and Release
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Tauri updater signing
@@ -144,51 +105,55 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_PATH: ${{ github.workspace }}/api.p8
-
-      - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.draft.outputs.tag_name }}
-          draft: true
-          files: |
-            src-tauri/target/${{ matrix.settings.target }}/release/bundle/dmg/*.dmg
-            src-tauri/target/${{ matrix.settings.target }}/release/bundle/macos/*.app.tar.gz
-            src-tauri/target/${{ matrix.settings.target }}/release/bundle/macos/*.app.tar.gz.sig
+          # Use production config for updater
+          tauriScript: npm run tauri
+          args: ${{ matrix.args }} --config src-tauri/tauri.prod.conf.json
+          # Release configuration
+          tagName: v__VERSION__
+          releaseName: "Dictara v__VERSION__"
+          releaseBody: "See the assets to download and install this version."
+          # IMPORTANT: releaseDraft must be false for updater to work!
+          releaseDraft: false
+          prerelease: ${{ inputs.prerelease }}
+          # This automatically generates and uploads latest.json
+          # uploadUpdaterJson: true  # This is the default
 
+  # Third job: cleanup on failure
   cleanup:
     name: Cleanup on Failure
-    needs: [draft, build]
-    if: failure() && needs.draft.outputs.needs_release == 'true'
+    needs: [prepare, publish-tauri]
+    if: failure()
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Delete draft release and tag
+      - name: Delete release and tag on failure
         uses: actions/github-script@v7
         with:
           script: |
-            const tagName = "${{ needs.draft.outputs.tag_name }}";
+            const tagName = "${{ needs.prepare.outputs.tag_name }}";
 
             console.log(`Cleaning up failed release for tag: ${tagName}`);
 
-            // Find and delete the draft release
+            // Find and delete the release (could be draft or published)
             try {
               const releases = await github.rest.repos.listReleases({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
               });
 
-              const draftRelease = releases.data.find(r => r.tag_name === tagName && r.draft);
+              const release = releases.data.find(r => r.tag_name === tagName);
 
-              if (draftRelease) {
+              if (release) {
                 await github.rest.repos.deleteRelease({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
-                  release_id: draftRelease.id,
+                  release_id: release.id,
                 });
-                console.log(`Deleted draft release: ${draftRelease.name}`);
+                console.log(`Deleted release: ${release.name}`);
               } else {
-                console.log('No draft release found to delete');
+                console.log('No release found to delete');
               }
             } catch (error) {
               console.log(`Failed to delete release: ${error.message}`);

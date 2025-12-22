@@ -9,6 +9,7 @@ mod setup;
 mod sound_player;
 mod tauri_commands;
 mod ui;
+mod updater;
 
 pub fn run() {
     // Load environment variables from .env file
@@ -17,6 +18,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| setup::setup_app(app))
         .invoke_handler(tauri::generate_handler![
             tauri_commands::check_accessibility_permission,
@@ -42,7 +45,9 @@ pub fn run() {
             // Error handling
             tauri_commands::retry_transcription,
             tauri_commands::dismiss_error,
-            tauri_commands::resize_popup_for_error
+            tauri_commands::resize_popup_for_error,
+            // Updater
+            updater::check_for_updates
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

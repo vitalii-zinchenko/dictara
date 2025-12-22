@@ -48,6 +48,7 @@ export default function PreferencesForm() {
   const [isLoading, setIsLoading] = useState(true)
   const [isTesting, setIsTesting] = useState<Provider>(null)
   const [appVersion, setAppVersion] = useState<string | null>(null)
+  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false)
 
   // Load configuration and keys on mount
   useEffect(() => {
@@ -86,6 +87,17 @@ export default function PreferencesForm() {
         console.error('[PreferencesForm] Failed to load app version:', e)
       })
   }, [])
+
+  const handleCheckForUpdates = async () => {
+    setIsCheckingUpdates(true)
+    try {
+      await invoke('check_for_updates', { showNoUpdateMessage: true })
+    } catch (e) {
+      console.error('[PreferencesForm] Failed to check for updates:', e)
+    } finally {
+      setIsCheckingUpdates(false)
+    }
+  }
 
   // OpenAI form
   const openaiForm = useForm({
@@ -597,8 +609,18 @@ export default function PreferencesForm() {
         </div>
       </Collapsible>
 
-      <div className="space-y-2 pt-4 border-t">
-        {appVersion && <p className="text-xs text-muted-foreground">v{appVersion}</p>}
+      <div className="space-y-3 pt-4 border-t">
+        <div className="flex items-center justify-between">
+          {appVersion && <p className="text-xs text-muted-foreground">v{appVersion}</p>}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleCheckForUpdates}
+            disabled={isCheckingUpdates}
+          >
+            {isCheckingUpdates ? 'Checking...' : 'Check for Updates'}
+          </Button>
+        </div>
         <p className="text-xs text-muted-foreground">
           API keys are stored securely in the macOS Keychain. Configuration is saved
           locally.

@@ -8,6 +8,8 @@
     "core:window:allow-set-size",
     "opener:default",
     "updater:default",
-    "core:app:allow-version"
+    "core:app:allow-version",
+    "dialog:default",
+    "process:allow-restart"
   ]
 }

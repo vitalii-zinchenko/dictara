@@ -19,6 +19,7 @@ use crate::recording::{
 };
 use crate::sound_player;
 use crate::ui::window::{close_recording_popup, open_recording_popup};
+use crate::updater;
 
 // Event payload for recording-stopped
 #[derive(Clone, Serialize)]
@@ -112,6 +113,8 @@ impl Controller {
                                 }
                             }
                             self.set_state(ControllerState::Ready);
+                            // Notify updater that recording/transcription finished
+                            updater::on_recording_finished(&self.app_handle);
                         }
                         _ => {
                             println!("[Controller] FnDown ignored in Recording state");
@@ -128,6 +131,8 @@ impl Controller {
                                 }
                             }
                             self.set_state(ControllerState::Ready);
+                            // Notify updater that recording/transcription finished
+                            updater::on_recording_finished(&self.app_handle);
                         }
                         _ => {
                             println!("[Controller] FnUp ignored (Ready or RecordingLocked state)");
@@ -164,6 +169,8 @@ impl Controller {
                     if let Err(e) = self.handle_retry_transcription() {
                         eprintln!("[Controller] Error retrying transcription: {:?}", e);
                     }
+                    // Notify updater that transcription finished (success or failure)
+                    updater::on_recording_finished(&self.app_handle);
                 }
             }
         }

@@ -1,3 +1,5 @@
+#[cfg(not(debug_assertions))]
+use crate::updater::{self, UpdaterState};
 use crate::{
     clients::openai::OpenAIClient,
     config::{self, Provider},
@@ -116,7 +118,7 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
     app.manage(last_recording_state.clone());
 
     // Start keyboard listener with command sender
-    let _listener = KeyListener::start(command_tx, recording_state);
+    let _listener = KeyListener::start(command_tx, recording_state.clone());
 
     let menu_with_items = build_menu(app)?;
     let paste_menu_item_state = PasteMenuItemState {
@@ -177,6 +179,14 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
     };
     app.manage(tray_state);
     app.manage(paste_menu_item_state);
+
+    // Initialize and start the updater (only in release builds)
+    #[cfg(not(debug_assertions))]
+    {
+        let updater_state = Arc::new(UpdaterState::new(recording_state));
+        app.manage(updater_state.clone());
+        updater::start_periodic_update_check(app.app_handle().clone(), updater_state);
+    }
 
     // Open preferences window if configuration needed
     if needs_configuration {
