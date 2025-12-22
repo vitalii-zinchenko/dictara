@@ -12,7 +12,9 @@
     "tauri": "tauri",
     "be:check": "cd src-tauri && cargo check",
     "be:lint": "cd src-tauri && cargo clippy -- -D warnings",
-    "be:format": "cd src-tauri && cargo fmt"
+    "be:format": "cd src-tauri && cargo fmt",
+    "verify": "npm run be:format && npm run be:lint && npm run be:check",
+    "prepare": "husky"
   },
   "dependencies": {
     "@radix-ui/react-collapsible": "^1.1.12",
@@ -41,6 +43,7 @@
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
     "autoprefixer": "^10.4.23",
+    "husky": "^9.1.7",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.19",
     "typescript": "~5.8.3",
