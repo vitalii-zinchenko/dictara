@@ -9,8 +9,7 @@ pub enum Provider {
 }
 
 /// Configuration for the active AI provider
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ProviderConfig {
     /// Currently enabled provider (only one can be enabled)
     pub enabled_provider: Option<Provider>,
@@ -18,7 +17,6 @@ pub struct ProviderConfig {
     /// Azure-specific configuration
     pub azure_endpoint: Option<String>,
 }
-
 
 /// Load provider configuration from store
 pub fn load_config(store: &tauri_plugin_store::Store<tauri::Wry>) -> ProviderConfig {

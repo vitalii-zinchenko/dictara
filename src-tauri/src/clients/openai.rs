@@ -317,9 +317,10 @@ impl OpenAIClient {
                 let form = reqwest::blocking::multipart::Form::new()
                     .file("file", &test_audio_path)
                     .map_err(|e| {
-                        TranscriptionError::IoError(std::io::Error::other(
-                            format!("Failed to read test file: {}", e),
-                        ))
+                        TranscriptionError::IoError(std::io::Error::other(format!(
+                            "Failed to read test file: {}",
+                            e
+                        )))
                     })?
                     .text("temperature", "0.0")
                     .text("response_format", "json");
@@ -424,9 +425,10 @@ impl OpenAIClient {
         let mut form = reqwest::blocking::multipart::Form::new()
             .file("file", &file_path)
             .map_err(|e| {
-                TranscriptionError::IoError(std::io::Error::other(
-                    format!("Failed to read file: {}", e),
-                ))
+                TranscriptionError::IoError(std::io::Error::other(format!(
+                    "Failed to read file: {}",
+                    e
+                )))
             })?
             .text("temperature", "0.0")
             // .text("prompt", " ")

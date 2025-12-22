@@ -17,9 +17,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .setup(|app| {
-            setup::setup_app(app)
-        })
+        .setup(|app| setup::setup_app(app))
         .invoke_handler(tauri::generate_handler![
             tauri_commands::check_accessibility_permission,
             tauri_commands::request_accessibility_permission,
