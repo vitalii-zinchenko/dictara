@@ -1,5 +1,6 @@
 import { useForm } from '@tanstack/react-form'
 import { invoke } from '@tauri-apps/api/core'
+import { getVersion } from '@tauri-apps/api/app'
 import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from './ui/button'
@@ -46,6 +47,7 @@ export default function PreferencesForm() {
   })
   const [isLoading, setIsLoading] = useState(true)
   const [isTesting, setIsTesting] = useState<Provider>(null)
+  const [appVersion, setAppVersion] = useState<string | null>(null)
 
   // Load configuration and keys on mount
   useEffect(() => {
@@ -71,6 +73,18 @@ export default function PreferencesForm() {
       }
     }
     loadData()
+  }, [])
+
+  // Load app version on mount
+  useEffect(() => {
+    getVersion()
+      .then((v) => {
+        console.log('[PreferencesForm] App version loaded:', v)
+        setAppVersion(v)
+      })
+      .catch((e: unknown) => {
+        console.error('[PreferencesForm] Failed to load app version:', e)
+      })
   }, [])
 
   // OpenAI form
@@ -583,10 +597,13 @@ export default function PreferencesForm() {
         </div>
       </Collapsible>
 
-      <p className="text-xs text-muted-foreground">
-        API keys are stored securely in the macOS Keychain. Configuration is saved
-        locally.
-      </p>
+      <div className="space-y-2 pt-4 border-t">
+        {appVersion && <p className="text-xs text-muted-foreground">v{appVersion}</p>}
+        <p className="text-xs text-muted-foreground">
+          API keys are stored securely in the macOS Keychain. Configuration is saved
+          locally.
+        </p>
+      </div>
     </div>
   )
 }
