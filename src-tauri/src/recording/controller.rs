@@ -257,13 +257,13 @@ impl Controller {
                 ));
             }
         };
-        let provider_config = config::load_config(&store);
+        let app_config = config::load_app_config(&store);
 
         // Transcribe with loaded config
         let transcription_result = self.openai_client.transcribe_audio_sync(
             PathBuf::from(&recording_result.file_path),
             recording_result.duration_ms,
-            &provider_config,
+            &app_config,
         );
 
         match transcription_result {
@@ -418,13 +418,13 @@ impl Controller {
                 ));
             }
         };
-        let provider_config = config::load_config(&store);
+        let app_config = config::load_app_config(&store);
 
         // Transcribe with loaded config
         let transcription_result = self.openai_client.transcribe_audio_sync(
             PathBuf::from(&audio_file_path),
             duration_ms,
-            &provider_config,
+            &app_config,
         );
 
         match transcription_result {

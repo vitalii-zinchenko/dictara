@@ -2,37 +2,49 @@ use serde::{Deserialize, Serialize};
 
 /// Provider types supported by the application
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum Provider {
+    #[serde(alias = "openai")]
     OpenAI,
-    Azure,
+    #[serde(alias = "azure", alias = "azure_openai")]
+    AzureOpenAI,
 }
 
-/// Configuration for the active AI provider
+/// App configuration (stored locally)
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ProviderConfig {
-    /// Currently enabled provider (only one can be enabled)
-    pub enabled_provider: Option<Provider>,
-
-    /// Azure-specific configuration
-    pub azure_endpoint: Option<String>,
+pub struct AppConfig {
+    /// Currently active provider (only one can be active)
+    pub active_provider: Option<Provider>,
 }
 
-/// Load provider configuration from store
-pub fn load_config(store: &tauri_plugin_store::Store<tauri::Wry>) -> ProviderConfig {
+/// OpenAI provider configuration (stored in keychain)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenAIConfig {
+    pub api_key: String,
+}
+
+/// Azure OpenAI provider configuration (stored in keychain)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AzureOpenAIConfig {
+    pub api_key: String,
+    pub endpoint: String,
+}
+
+/// Load app configuration from store
+pub fn load_app_config(store: &tauri_plugin_store::Store<tauri::Wry>) -> AppConfig {
     store
-        .get("provider_config")
+        .get("app_config")
         .and_then(|v| serde_json::from_value(v).ok())
         .unwrap_or_default()
 }
 
-/// Save provider configuration to store
-pub fn save_config(
+/// Save app configuration to store
+pub fn save_app_config(
     store: &tauri_plugin_store::Store<tauri::Wry>,
-    config: &ProviderConfig,
+    config: &AppConfig,
 ) -> Result<(), String> {
     store.set(
-        "provider_config",
+        "app_config",
         serde_json::to_value(config).map_err(|e| e.to_string())?,
     );
     store.save().map_err(|e| e.to_string())?;

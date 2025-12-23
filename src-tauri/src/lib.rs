@@ -27,19 +27,19 @@ pub fn run() {
             tauri_commands::restart_app,
             tauri_commands::stop_recording,
             tauri_commands::cancel_recording,
-            // Provider configuration
-            tauri_commands::load_provider_config,
-            tauri_commands::save_provider_config,
-            // OpenAI
-            tauri_commands::save_openai_key,
-            tauri_commands::load_openai_key,
-            tauri_commands::delete_openai_key,
-            tauri_commands::test_openai_key,
-            // Azure
-            tauri_commands::save_azure_key,
-            tauri_commands::load_azure_key,
-            tauri_commands::delete_azure_key,
-            tauri_commands::test_azure_key,
+            // App configuration
+            tauri_commands::load_app_config,
+            tauri_commands::save_app_config,
+            // OpenAI provider
+            tauri_commands::load_openai_config,
+            tauri_commands::save_openai_config,
+            tauri_commands::delete_openai_config,
+            tauri_commands::test_openai_config,
+            // Azure OpenAI provider
+            tauri_commands::load_azure_openai_config,
+            tauri_commands::save_azure_openai_config,
+            tauri_commands::delete_azure_openai_config,
+            tauri_commands::test_azure_openai_config,
             // Audio
             tauri_commands::register_audio_level_channel,
             // Error handling
