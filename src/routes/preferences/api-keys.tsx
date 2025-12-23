@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { ApiKeys } from '@/components/preferences/ApiKeys'
+import { ApiKeys } from '@/components/preferences/api-keys'
 
 export const Route = createFileRoute('/preferences/api-keys')({
   component: ApiKeysRoute,

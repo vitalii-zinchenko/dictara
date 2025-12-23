@@ -1,7 +1,7 @@
-use crate::config::{Provider, ProviderConfig};
-use crate::keychain::{self, KeychainAccount};
+use crate::config::{AppConfig, AzureOpenAIConfig, OpenAIConfig, Provider};
+use crate::keychain::{self, ProviderAccount};
 use async_openai::{
-    config::OpenAIConfig,
+    config::OpenAIConfig as AsyncOpenAIConfig,
     types::{AudioResponseFormat, CreateTranscriptionRequestArgs},
     Client,
 };
@@ -116,7 +116,7 @@ impl ApiConfig {
     fn transcription_url(&self) -> String {
         match self.provider {
             Provider::OpenAI => OPENAI_TRANSCRIPTION_URL.to_string(),
-            Provider::Azure => {
+            Provider::AzureOpenAI => {
                 // Azure URL format: user provides full endpoint path, we just add api-version
                 // Example: https://xxx.cognitiveservices.azure.com/openai/deployments/whisper/audio/transcriptions
                 format!(
@@ -132,7 +132,7 @@ impl ApiConfig {
     fn models_url(&self) -> String {
         match self.provider {
             Provider::OpenAI => OPENAI_MODELS_URL.to_string(),
-            Provider::Azure => {
+            Provider::AzureOpenAI => {
                 format!(
                     "{}/openai/deployments?api-version={}",
                     self.endpoint.trim_end_matches('/'),
@@ -149,13 +149,13 @@ impl ApiConfig {
     ) -> reqwest::blocking::RequestBuilder {
         match self.provider {
             Provider::OpenAI => request.bearer_auth(&self.api_key),
-            Provider::Azure => request.header("api-key", &self.api_key),
+            Provider::AzureOpenAI => request.header("api-key", &self.api_key),
         }
     }
 }
 
 pub struct OpenAIClient {
-    client: Client<OpenAIConfig>,
+    client: Client<AsyncOpenAIConfig>,
 }
 
 impl Clone for OpenAIClient {
@@ -175,32 +175,27 @@ impl OpenAIClient {
         }
     }
 
-    /// Load API configuration from keychain and config store
-    pub fn load_config(config: &ProviderConfig) -> Result<ApiConfig, TranscriptionError> {
+    /// Load API configuration from keychain based on app config
+    pub fn load_config(config: &AppConfig) -> Result<ApiConfig, TranscriptionError> {
         let provider = config
-            .enabled_provider
+            .active_provider
             .as_ref()
             .ok_or(TranscriptionError::ApiKeyMissing)?;
 
         let (api_key, endpoint) = match provider {
             Provider::OpenAI => {
-                let key = keychain::load_api_key(KeychainAccount::OpenAI)
-                    .map_err(|_| TranscriptionError::ApiKeyMissing)?
-                    .ok_or(TranscriptionError::ApiKeyMissing)?;
-                (key, String::new())
+                let openai_config: OpenAIConfig =
+                    keychain::load_provider_config(ProviderAccount::OpenAI)
+                        .map_err(|_| TranscriptionError::ApiKeyMissing)?
+                        .ok_or(TranscriptionError::ApiKeyMissing)?;
+                (openai_config.api_key, String::new())
             }
-            Provider::Azure => {
-                let key = keychain::load_api_key(KeychainAccount::Azure)
-                    .map_err(|_| TranscriptionError::ApiKeyMissing)?
-                    .ok_or(TranscriptionError::ApiKeyMissing)?;
-                let endpoint =
-                    config
-                        .azure_endpoint
-                        .clone()
-                        .ok_or(TranscriptionError::ApiError(
-                            "Azure endpoint not configured".to_string(),
-                        ))?;
-                (key, endpoint)
+            Provider::AzureOpenAI => {
+                let azure_config: AzureOpenAIConfig =
+                    keychain::load_provider_config(ProviderAccount::AzureOpenAI)
+                        .map_err(|_| TranscriptionError::ApiKeyMissing)?
+                        .ok_or(TranscriptionError::ApiKeyMissing)?;
+                (azure_config.api_key, azure_config.endpoint)
             }
         };
 
@@ -214,7 +209,7 @@ impl OpenAIClient {
     /// Test if an API key is valid
     ///
     /// # Arguments
-    /// * `provider` - The provider type (OpenAI or Azure)
+    /// * `provider` - The provider type (OpenAI or AzureOpenAI)
     /// * `key` - The API key to test
     /// * `endpoint` - Optional Azure endpoint (required for Azure, ignored for OpenAI)
     ///
@@ -273,7 +268,7 @@ impl OpenAIClient {
                     )))
                 }
             }
-            Provider::Azure => {
+            Provider::AzureOpenAI => {
                 // Azure: Test with actual transcription since /deployments endpoint is deprecated
                 println!("[OpenAI Client] Testing Azure with silent audio transcription...");
 
@@ -309,7 +304,7 @@ impl OpenAIClient {
 
                 // Test transcription
                 let api_config = ApiConfig {
-                    provider: Provider::Azure,
+                    provider: Provider::AzureOpenAI,
                     api_key: key.to_string(),
                     endpoint: endpoint.unwrap_or("").to_string(),
                 };
@@ -368,7 +363,7 @@ impl OpenAIClient {
     /// # Arguments
     /// * `file_path` - Path to the audio file (WAV, MP3, etc.)
     /// * `duration_ms` - Duration of the recording in milliseconds (for validation)
-    /// * `config` - Provider configuration (which provider to use and settings)
+    /// * `config` - App configuration (which provider to use)
     ///
     /// # Returns
     /// * `Ok(String)` - Transcribed text
@@ -377,7 +372,7 @@ impl OpenAIClient {
         &self,
         file_path: PathBuf,
         duration_ms: u64,
-        config: &ProviderConfig,
+        config: &AppConfig,
     ) -> Result<String, TranscriptionError> {
         println!(
             "[OpenAI Client] Transcribing (sync): {:?} (duration: {}ms)",
@@ -447,7 +442,7 @@ impl OpenAIClient {
             if api_config.provider == Provider::OpenAI {
                 "OpenAI"
             } else {
-                "Azure"
+                "Azure OpenAI"
             }
         );
 

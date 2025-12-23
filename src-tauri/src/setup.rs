@@ -2,9 +2,9 @@
 use crate::updater::{self, UpdaterState};
 use crate::{
     clients::openai::OpenAIClient,
-    config::{self, Provider},
+    config::{self, AzureOpenAIConfig, OpenAIConfig, Provider},
     keyboard_listener::KeyListener,
-    keychain::{self, KeychainAccount},
+    keychain::{self, ProviderAccount},
     recording::{Controller, LastRecording, LastRecordingState, RecordingCommand},
     ui::{
         menu::build_menu,
@@ -50,23 +50,23 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
     // Initialize OpenAI client (always succeeds, key checked at transcription time)
     let openai_client = OpenAIClient::new();
 
-    // Load provider config and check if properly configured
+    // Load app config and check if properly configured
     let store = app.store("config.json")?;
-    let provider_config = config::load_config(&store);
+    let app_config = config::load_app_config(&store);
 
     // Check if any provider is properly configured
-    let needs_configuration = match &provider_config.enabled_provider {
-        Some(Provider::OpenAI) => keychain::load_api_key(KeychainAccount::OpenAI)
-            .ok()
-            .flatten()
-            .is_none(),
-        Some(Provider::Azure) => {
-            let has_key = keychain::load_api_key(KeychainAccount::Azure)
+    let needs_configuration = match &app_config.active_provider {
+        Some(Provider::OpenAI) => {
+            keychain::load_provider_config::<OpenAIConfig>(ProviderAccount::OpenAI)
                 .ok()
                 .flatten()
-                .is_some();
-            let has_endpoint = provider_config.azure_endpoint.is_some();
-            !has_key || !has_endpoint
+                .is_none()
+        }
+        Some(Provider::AzureOpenAI) => {
+            keychain::load_provider_config::<AzureOpenAIConfig>(ProviderAccount::AzureOpenAI)
+                .ok()
+                .flatten()
+                .is_none()
         }
         None => true,
     };
