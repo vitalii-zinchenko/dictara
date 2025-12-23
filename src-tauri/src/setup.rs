@@ -27,6 +27,8 @@ pub struct AudioLevelChannel {
 }
 
 pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::error::Error>> {
+    println!("Dictara v{}", env!("CARGO_PKG_VERSION"));
+
     // Check accessibility permission on macOS
     #[cfg(target_os = "macos")]
     {
