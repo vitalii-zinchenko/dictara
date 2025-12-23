@@ -9,54 +9,107 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as RecordingPopupRouteImport } from './routes/recording-popup'
-import { Route as PreferencesRouteImport } from './routes/preferences'
-import { Route as IndexRouteImport } from './routes/index'
+import { Route as RecordingPopupRouteRouteImport } from './routes/recording-popup/route'
+import { Route as PreferencesRouteRouteImport } from './routes/preferences/route'
+import { Route as RecordingPopupIndexRouteImport } from './routes/recording-popup/index'
+import { Route as PreferencesIndexRouteImport } from './routes/preferences/index'
+import { Route as PreferencesUpdatesRouteImport } from './routes/preferences/updates'
+import { Route as PreferencesApiKeysRouteImport } from './routes/preferences/api-keys'
+import { Route as PreferencesAboutRouteImport } from './routes/preferences/about'
 
-const RecordingPopupRoute = RecordingPopupRouteImport.update({
+const RecordingPopupRouteRoute = RecordingPopupRouteRouteImport.update({
   id: '/recording-popup',
   path: '/recording-popup',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PreferencesRoute = PreferencesRouteImport.update({
+const PreferencesRouteRoute = PreferencesRouteRouteImport.update({
   id: '/preferences',
   path: '/preferences',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
+const RecordingPopupIndexRoute = RecordingPopupIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => RecordingPopupRouteRoute,
+} as any)
+const PreferencesIndexRoute = PreferencesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => PreferencesRouteRoute,
+} as any)
+const PreferencesUpdatesRoute = PreferencesUpdatesRouteImport.update({
+  id: '/updates',
+  path: '/updates',
+  getParentRoute: () => PreferencesRouteRoute,
+} as any)
+const PreferencesApiKeysRoute = PreferencesApiKeysRouteImport.update({
+  id: '/api-keys',
+  path: '/api-keys',
+  getParentRoute: () => PreferencesRouteRoute,
+} as any)
+const PreferencesAboutRoute = PreferencesAboutRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => PreferencesRouteRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/preferences': typeof PreferencesRoute
-  '/recording-popup': typeof RecordingPopupRoute
+  '/preferences': typeof PreferencesRouteRouteWithChildren
+  '/recording-popup': typeof RecordingPopupRouteRouteWithChildren
+  '/preferences/about': typeof PreferencesAboutRoute
+  '/preferences/api-keys': typeof PreferencesApiKeysRoute
+  '/preferences/updates': typeof PreferencesUpdatesRoute
+  '/preferences/': typeof PreferencesIndexRoute
+  '/recording-popup/': typeof RecordingPopupIndexRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/preferences': typeof PreferencesRoute
-  '/recording-popup': typeof RecordingPopupRoute
+  '/preferences/about': typeof PreferencesAboutRoute
+  '/preferences/api-keys': typeof PreferencesApiKeysRoute
+  '/preferences/updates': typeof PreferencesUpdatesRoute
+  '/preferences': typeof PreferencesIndexRoute
+  '/recording-popup': typeof RecordingPopupIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/preferences': typeof PreferencesRoute
-  '/recording-popup': typeof RecordingPopupRoute
+  '/preferences': typeof PreferencesRouteRouteWithChildren
+  '/recording-popup': typeof RecordingPopupRouteRouteWithChildren
+  '/preferences/about': typeof PreferencesAboutRoute
+  '/preferences/api-keys': typeof PreferencesApiKeysRoute
+  '/preferences/updates': typeof PreferencesUpdatesRoute
+  '/preferences/': typeof PreferencesIndexRoute
+  '/recording-popup/': typeof RecordingPopupIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/preferences' | '/recording-popup'
+  fullPaths:
+    | '/preferences'
+    | '/recording-popup'
+    | '/preferences/about'
+    | '/preferences/api-keys'
+    | '/preferences/updates'
+    | '/preferences/'
+    | '/recording-popup/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/preferences' | '/recording-popup'
-  id: '__root__' | '/' | '/preferences' | '/recording-popup'
+  to:
+    | '/preferences/about'
+    | '/preferences/api-keys'
+    | '/preferences/updates'
+    | '/preferences'
+    | '/recording-popup'
+  id:
+    | '__root__'
+    | '/preferences'
+    | '/recording-popup'
+    | '/preferences/about'
+    | '/preferences/api-keys'
+    | '/preferences/updates'
+    | '/preferences/'
+    | '/recording-popup/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  PreferencesRoute: typeof PreferencesRoute
-  RecordingPopupRoute: typeof RecordingPopupRoute
+  PreferencesRouteRoute: typeof PreferencesRouteRouteWithChildren
+  RecordingPopupRouteRoute: typeof RecordingPopupRouteRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -65,30 +118,85 @@ declare module '@tanstack/react-router' {
       id: '/recording-popup'
       path: '/recording-popup'
       fullPath: '/recording-popup'
-      preLoaderRoute: typeof RecordingPopupRouteImport
+      preLoaderRoute: typeof RecordingPopupRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/preferences': {
       id: '/preferences'
       path: '/preferences'
       fullPath: '/preferences'
-      preLoaderRoute: typeof PreferencesRouteImport
+      preLoaderRoute: typeof PreferencesRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
+    '/recording-popup/': {
+      id: '/recording-popup/'
       path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
+      fullPath: '/recording-popup/'
+      preLoaderRoute: typeof RecordingPopupIndexRouteImport
+      parentRoute: typeof RecordingPopupRouteRoute
+    }
+    '/preferences/': {
+      id: '/preferences/'
+      path: '/'
+      fullPath: '/preferences/'
+      preLoaderRoute: typeof PreferencesIndexRouteImport
+      parentRoute: typeof PreferencesRouteRoute
+    }
+    '/preferences/updates': {
+      id: '/preferences/updates'
+      path: '/updates'
+      fullPath: '/preferences/updates'
+      preLoaderRoute: typeof PreferencesUpdatesRouteImport
+      parentRoute: typeof PreferencesRouteRoute
+    }
+    '/preferences/api-keys': {
+      id: '/preferences/api-keys'
+      path: '/api-keys'
+      fullPath: '/preferences/api-keys'
+      preLoaderRoute: typeof PreferencesApiKeysRouteImport
+      parentRoute: typeof PreferencesRouteRoute
+    }
+    '/preferences/about': {
+      id: '/preferences/about'
+      path: '/about'
+      fullPath: '/preferences/about'
+      preLoaderRoute: typeof PreferencesAboutRouteImport
+      parentRoute: typeof PreferencesRouteRoute
     }
   }
 }
 
+interface PreferencesRouteRouteChildren {
+  PreferencesAboutRoute: typeof PreferencesAboutRoute
+  PreferencesApiKeysRoute: typeof PreferencesApiKeysRoute
+  PreferencesUpdatesRoute: typeof PreferencesUpdatesRoute
+  PreferencesIndexRoute: typeof PreferencesIndexRoute
+}
+
+const PreferencesRouteRouteChildren: PreferencesRouteRouteChildren = {
+  PreferencesAboutRoute: PreferencesAboutRoute,
+  PreferencesApiKeysRoute: PreferencesApiKeysRoute,
+  PreferencesUpdatesRoute: PreferencesUpdatesRoute,
+  PreferencesIndexRoute: PreferencesIndexRoute,
+}
+
+const PreferencesRouteRouteWithChildren =
+  PreferencesRouteRoute._addFileChildren(PreferencesRouteRouteChildren)
+
+interface RecordingPopupRouteRouteChildren {
+  RecordingPopupIndexRoute: typeof RecordingPopupIndexRoute
+}
+
+const RecordingPopupRouteRouteChildren: RecordingPopupRouteRouteChildren = {
+  RecordingPopupIndexRoute: RecordingPopupIndexRoute,
+}
+
+const RecordingPopupRouteRouteWithChildren =
+  RecordingPopupRouteRoute._addFileChildren(RecordingPopupRouteRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  PreferencesRoute: PreferencesRoute,
-  RecordingPopupRoute: RecordingPopupRoute,
+  PreferencesRouteRoute: PreferencesRouteRouteWithChildren,
+  RecordingPopupRouteRoute: RecordingPopupRouteRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

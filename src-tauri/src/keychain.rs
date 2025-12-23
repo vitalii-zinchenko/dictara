@@ -1,5 +1,9 @@
 use keyring::Entry;
 
+#[cfg(debug_assertions)]
+const SERVICE: &str = "app.dictara.dev";
+
+#[cfg(not(debug_assertions))]
 const SERVICE: &str = "app.dictara";
 
 // Account names for different providers

@@ -247,7 +247,7 @@ fn resize_recording_popup_inner(app_handle: &tauri::AppHandle, width: u32) -> Re
 }
 
 pub fn open_preferences_window(app_handle: &tauri::AppHandle) -> Result<(), AnyError> {
-    let (width, height) = (450.0, 800.0);
+    let (width, height) = (750.0, 650.0);
 
     let window = match app_handle.get_webview_window("preferences") {
         Some(w) => w,
