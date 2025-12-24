@@ -1,32 +1,41 @@
+import { useAppConfig } from '@/hooks/useAppConfig'
 import { invoke } from '@tauri-apps/api/core'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Collapsible, CollapsibleContent } from '../../ui/collapsible'
 import { Switch } from '../../ui/switch'
 import { AzureOpenAIProvider } from './AzureProvider'
 import { OpenAIProvider } from './OpenAiProvider'
-import type { AppConfig, Provider } from './types'
+import type { Provider } from './types'
 
 export function ApiKeys() {
+  // Load app config using TanStack Query (type-safe via tauri-specta)
+  const { data: config, isLoading, error } = useAppConfig()
   const [activeProvider, setActiveProvider] = useState<Provider>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [expandedSection, setExpandedSection] = useState<Provider>(null)
+  const isInitialized = useRef(false)
 
-  // Load app config on mount
+  // Sync activeProvider state when config first loads
   useEffect(() => {
-    async function loadConfig() {
-      try {
-        const config = await invoke<AppConfig>('load_app_config')
-        setActiveProvider(config.active_provider)
-        console.log('[ApiKeys] Loaded config:', config)
-      } catch (e) {
-        console.error('[ApiKeys] Failed to load config:', e)
-      } finally {
-        setIsLoading(false)
-      }
+    if (config && !isInitialized.current) {
+      setActiveProvider(config.active_provider)
+      // Auto-expand the active provider's section on initial load
+      setExpandedSection(config.active_provider)
+      isInitialized.current = true
+      console.log('[ApiKeys] Loaded config:', config)
     }
-    loadConfig()
-  }, [])
+  }, [config])
 
+  if (error) {
+    console.error('[ApiKeys] Failed to load config:', error)
+  }
+
+  // Toggle section expand/collapse (visual only)
+  const handleToggleExpand = (provider: Provider) => {
+    setExpandedSection(expandedSection === provider ? null : provider)
+  }
+
+  // Toggle provider activation (functional)
   const handleToggleProvider = async (provider: Provider) => {
     console.log('[ApiKeys] Toggling provider:', provider)
 
@@ -53,14 +62,20 @@ export function ApiKeys() {
       </p>
 
       {/* OpenAI Provider Section */}
-      <Collapsible open={activeProvider === 'open_ai'}>
+      <Collapsible open={expandedSection === 'open_ai'}>
         <div className="border rounded-lg p-4">
-          <div className="flex items-center justify-between w-full mb-4">
+          <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-2">
-              {activeProvider === 'open_ai' ? (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              {expandedSection === 'open_ai' ? (
+                <ChevronDown
+                  className="h-4 w-4 text-muted-foreground cursor-pointer hover:text-foreground"
+                  onClick={() => handleToggleExpand('open_ai')}
+                />
               ) : (
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                <ChevronRight
+                  className="h-4 w-4 text-muted-foreground cursor-pointer hover:text-foreground"
+                  onClick={() => handleToggleExpand('open_ai')}
+                />
               )}
               <h3 className="text-lg font-semibold">OpenAI</h3>
             </div>
@@ -70,21 +85,27 @@ export function ApiKeys() {
             />
           </div>
 
-          <CollapsibleContent>
+          <CollapsibleContent className="mt-3">
             <OpenAIProvider />
           </CollapsibleContent>
         </div>
       </Collapsible>
 
       {/* Azure OpenAI Provider Section */}
-      <Collapsible open={activeProvider === 'azure_open_ai'}>
+      <Collapsible open={expandedSection === 'azure_open_ai'}>
         <div className="border rounded-lg p-4">
-          <div className="flex items-center justify-between w-full mb-4">
+          <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-2">
-              {activeProvider === 'azure_open_ai' ? (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              {expandedSection === 'azure_open_ai' ? (
+                <ChevronDown
+                  className="h-4 w-4 text-muted-foreground cursor-pointer hover:text-foreground"
+                  onClick={() => handleToggleExpand('azure_open_ai')}
+                />
               ) : (
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                <ChevronRight
+                  className="h-4 w-4 text-muted-foreground cursor-pointer hover:text-foreground"
+                  onClick={() => handleToggleExpand('azure_open_ai')}
+                />
               )}
               <h3 className="text-lg font-semibold">Azure OpenAI</h3>
             </div>
@@ -94,7 +115,7 @@ export function ApiKeys() {
             />
           </div>
 
-          <CollapsibleContent>
+          <CollapsibleContent className="mt-3">
             <AzureOpenAIProvider />
           </CollapsibleContent>
         </div>

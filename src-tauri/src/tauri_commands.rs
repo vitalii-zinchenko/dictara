@@ -55,6 +55,7 @@ pub fn cancel_recording(sender: State<RecordingCommandSender>) -> Result<(), Str
 // ===== APP CONFIGURATION COMMANDS =====
 
 #[tauri::command]
+#[specta::specta]
 pub fn load_app_config(app: tauri::AppHandle) -> Result<AppConfig, String> {
     println!("[Command] load_app_config called");
 

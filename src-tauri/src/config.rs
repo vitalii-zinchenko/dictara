@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Provider types supported by the application
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum Provider {
     #[serde(alias = "openai")]
@@ -11,7 +11,7 @@ pub enum Provider {
 }
 
 /// App configuration (stored locally)
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]
 pub struct AppConfig {
     /// Currently active provider (only one can be active)
     pub active_provider: Option<Provider>,
