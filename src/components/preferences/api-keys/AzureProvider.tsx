@@ -4,10 +4,23 @@ import { useEffect, useState } from 'react'
 import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
 import { Label } from '../../ui/label'
-import type { AzureOpenAIConfig, ProviderFormState } from './types'
+import { ProviderSection } from './ProviderSection'
+import type { AzureOpenAIConfig, Provider, ProviderFormState } from './types'
 import { maskApiKey } from './utils'
 
-export function AzureOpenAIProvider() {
+interface AzureOpenAIProviderProps {
+  isActive: boolean
+  isExpanded: boolean
+  onToggleActive: (provider: Provider) => void
+  onToggleExpand: (provider: Provider) => void
+}
+
+export function AzureOpenAIProvider({
+  isActive,
+  isExpanded,
+  onToggleActive,
+  onToggleExpand,
+}: AzureOpenAIProviderProps) {
   const [existingConfig, setExistingConfig] = useState<AzureOpenAIConfig | null>(null)
   const [state, setState] = useState<ProviderFormState>({
     testResult: null,
@@ -109,11 +122,31 @@ export function AzureOpenAIProvider() {
   }
 
   if (state.isLoading) {
-    return <div className="text-muted-foreground text-sm">Loading...</div>
+    return (
+      <ProviderSection
+        provider="azure_open_ai"
+        title="Azure OpenAI"
+        isExpanded={isExpanded}
+        isActive={isActive}
+        canEnable={false}
+        onToggleExpand={onToggleExpand}
+        onToggleActive={onToggleActive}
+      >
+        <div className="text-muted-foreground text-sm">Loading...</div>
+      </ProviderSection>
+    )
   }
 
   return (
-    <>
+    <ProviderSection
+      provider="azure_open_ai"
+      title="Azure OpenAI"
+      isExpanded={isExpanded}
+      isActive={isActive}
+      canEnable={!!existingConfig}
+      onToggleExpand={onToggleExpand}
+      onToggleActive={onToggleActive}
+    >
       {/* Existing config display */}
       {existingConfig && (
         <div className="p-3 bg-muted rounded-lg mb-4">
@@ -268,6 +301,6 @@ export function AzureOpenAIProvider() {
           </form.Subscribe>
         </div>
       </form>
-    </>
+    </ProviderSection>
   )
 }

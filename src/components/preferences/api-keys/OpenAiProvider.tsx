@@ -4,10 +4,23 @@ import { useEffect, useState } from 'react'
 import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
 import { Label } from '../../ui/label'
-import type { OpenAIConfig, ProviderFormState } from './types'
+import { ProviderSection } from './ProviderSection'
+import type { OpenAIConfig, Provider, ProviderFormState } from './types'
 import { maskApiKey } from './utils'
 
-export function OpenAIProvider() {
+interface OpenAIProviderProps {
+  isActive: boolean
+  isExpanded: boolean
+  onToggleActive: (provider: Provider) => void
+  onToggleExpand: (provider: Provider) => void
+}
+
+export function OpenAIProvider({
+  isActive,
+  isExpanded,
+  onToggleActive,
+  onToggleExpand,
+}: OpenAIProviderProps) {
   const [existingConfig, setExistingConfig] = useState<OpenAIConfig | null>(null)
   const [state, setState] = useState<ProviderFormState>({
     testResult: null,
@@ -101,11 +114,31 @@ export function OpenAIProvider() {
   }
 
   if (state.isLoading) {
-    return <div className="text-muted-foreground text-sm">Loading...</div>
+    return (
+      <ProviderSection
+        provider="open_ai"
+        title="OpenAI"
+        isExpanded={isExpanded}
+        isActive={isActive}
+        canEnable={false}
+        onToggleExpand={onToggleExpand}
+        onToggleActive={onToggleActive}
+      >
+        <div className="text-muted-foreground text-sm">Loading...</div>
+      </ProviderSection>
+    )
   }
 
   return (
-    <>
+    <ProviderSection
+      provider="open_ai"
+      title="OpenAI"
+      isExpanded={isExpanded}
+      isActive={isActive}
+      canEnable={!!existingConfig}
+      onToggleExpand={onToggleExpand}
+      onToggleActive={onToggleActive}
+    >
       {/* Existing config display */}
       {existingConfig && (
         <div className="p-3 bg-muted rounded-lg mb-4">
@@ -213,6 +246,6 @@ export function OpenAIProvider() {
           </form.Subscribe>
         </div>
       </form>
-    </>
+    </ProviderSection>
   )
 }

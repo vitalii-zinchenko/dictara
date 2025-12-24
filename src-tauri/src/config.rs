@@ -2,11 +2,15 @@ use serde::{Deserialize, Serialize};
 
 /// Provider types supported by the application
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, specta::Type)]
-#[serde(rename_all = "snake_case")]
 pub enum Provider {
-    #[serde(alias = "openai")]
+    #[serde(rename = "open_ai", alias = "openai", alias = "open_a_i")]
     OpenAI,
-    #[serde(alias = "azure", alias = "azure_openai")]
+    #[serde(
+        rename = "azure_open_ai",
+        alias = "azure",
+        alias = "azure_openai",
+        alias = "azure_open_a_i"
+    )]
     AzureOpenAI,
 }
 
