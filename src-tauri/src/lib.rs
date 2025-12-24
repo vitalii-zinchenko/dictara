@@ -16,7 +16,28 @@ fn build_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
     tauri_specta::Builder::<tauri::Wry>::new()
         // Commands with specta support (type-safe bindings will be generated)
         .commands(tauri_specta::collect_commands![
+            // App configuration
             tauri_commands::load_app_config,
+            tauri_commands::save_app_config,
+            // OpenAI provider
+            tauri_commands::load_openai_config,
+            tauri_commands::save_openai_config,
+            tauri_commands::delete_openai_config,
+            tauri_commands::test_openai_config,
+            // Azure OpenAI provider
+            tauri_commands::load_azure_openai_config,
+            tauri_commands::save_azure_openai_config,
+            tauri_commands::delete_azure_openai_config,
+            tauri_commands::test_azure_openai_config,
+            // Recording
+            tauri_commands::stop_recording,
+            tauri_commands::cancel_recording,
+            tauri_commands::retry_transcription,
+            tauri_commands::dismiss_error,
+            tauri_commands::resize_popup_for_error,
+            tauri_commands::register_audio_level_channel,
+            // Updater
+            updater::check_for_updates,
         ])
 }
 
@@ -42,6 +63,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| setup::setup_app(app))
         // Note: specta_builder is only used for TypeScript generation (export above)
         // All commands still go through generate_handler! for runtime

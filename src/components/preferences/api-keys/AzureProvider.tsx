@@ -1,12 +1,17 @@
 import { useForm } from '@tanstack/react-form'
-import { invoke } from '@tauri-apps/api/core'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
 import { Label } from '../../ui/label'
 import { ProviderSection } from './ProviderSection'
-import type { AzureOpenAIConfig, Provider, ProviderFormState } from './types'
-import { maskApiKey } from './utils'
+import type { Provider } from './types'
+import { MASKED_API_KEY_PLACEHOLDER } from './utils'
+import {
+  useAzureOpenAIConfig,
+  useSaveAzureOpenAIConfig,
+  useTestAzureOpenAIConfig,
+  useDeleteAzureOpenAIConfig,
+} from '@/hooks/useAzureOpenAIConfig'
 
 interface AzureOpenAIProviderProps {
   isActive: boolean
@@ -21,107 +26,82 @@ export function AzureOpenAIProvider({
   onToggleActive,
   onToggleExpand,
 }: AzureOpenAIProviderProps) {
-  const [existingConfig, setExistingConfig] = useState<AzureOpenAIConfig | null>(null)
-  const [state, setState] = useState<ProviderFormState>({
-    testResult: null,
-    saveSuccess: false,
-    errorMessage: null,
-    isTesting: false,
-    isLoading: true,
-  })
+  const [saveSuccess, setSaveSuccess] = useState(false)
 
-  // Load config on mount
-  useEffect(() => {
-    async function loadConfig() {
-      try {
-        const config = await invoke<AzureOpenAIConfig | null>('load_azure_openai_config')
-        setExistingConfig(config)
-        console.log('[AzureOpenAIProvider] Loaded config:', config ? 'exists' : 'none')
-      } catch (e) {
-        console.error('[AzureOpenAIProvider] Failed to load config:', e)
-      } finally {
-        setState((prev) => ({ ...prev, isLoading: false }))
-      }
-    }
-    loadConfig()
-  }, [])
+  // TanStack Query hooks
+  const { data: existingConfig, isLoading } = useAzureOpenAIConfig()
+  const saveConfig = useSaveAzureOpenAIConfig()
+  const testConfig = useTestAzureOpenAIConfig()
+  const deleteConfig = useDeleteAzureOpenAIConfig()
 
   const form = useForm({
     defaultValues: {
       apiKey: '',
       endpoint: '',
     },
+    validators: {
+      onSubmitAsync: async ({ value }) => {
+        // Validate the entire configuration by testing it
+        console.log('[AzureOpenAIProvider] Validating configuration...')
+
+        try {
+          const isValid = await testConfig.mutateAsync({
+            apiKey: value.apiKey,
+            endpoint: value.endpoint,
+          })
+
+          if (!isValid) {
+            return {
+              form: 'Invalid Azure OpenAI configuration. Please check your endpoint and API key.',
+              fields: {},
+            }
+          }
+
+          return undefined
+        } catch (e) {
+          console.error('[AzureOpenAIProvider] Validation failed:', e)
+          return {
+            form: 'Failed to validate configuration. Please try again.',
+            fields: {},
+          }
+        }
+      },
+    },
     onSubmit: async ({ value }) => {
       console.log('[AzureOpenAIProvider] Saving config...')
-      setState((prev) => ({ ...prev, errorMessage: null, saveSuccess: false }))
+      setSaveSuccess(false)
 
       try {
-        await invoke('save_azure_openai_config', {
+        await saveConfig.mutateAsync({
           apiKey: value.apiKey,
           endpoint: value.endpoint,
         })
         console.log('[AzureOpenAIProvider] Config saved successfully')
-        setExistingConfig({ api_key: value.apiKey, endpoint: value.endpoint })
-        setState((prev) => ({ ...prev, saveSuccess: true, testResult: null }))
+        setSaveSuccess(true)
         form.reset()
       } catch (e) {
         console.error('[AzureOpenAIProvider] Failed to save config:', e)
-        setState((prev) => ({ ...prev, errorMessage: `Failed to save: ${e}` }))
       }
     },
   })
 
-  const handleTest = async () => {
-    const apiKey = form.getFieldValue('apiKey')
-    const endpoint = form.getFieldValue('endpoint')
-    if (!apiKey || !endpoint) return
-
-    console.log('[AzureOpenAIProvider] Testing config...')
-    setState((prev) => ({ ...prev, isTesting: true, testResult: null, errorMessage: null }))
-
-    try {
-      const isValid = await invoke<boolean>('test_azure_openai_config', {
-        apiKey,
-        endpoint,
-      })
-      console.log('[AzureOpenAIProvider] Test result:', isValid)
-      setState((prev) => ({
-        ...prev,
-        testResult: isValid ? 'success' : 'error',
-        errorMessage: isValid ? null : 'Invalid API key or endpoint',
-        isTesting: false,
-      }))
-    } catch (e) {
-      console.error('[AzureOpenAIProvider] Failed to test config:', e)
-      setState((prev) => ({
-        ...prev,
-        testResult: 'error',
-        errorMessage: `Test failed: ${e}`,
-        isTesting: false,
-      }))
-    }
-  }
-
   const handleDelete = async () => {
     console.log('[AzureOpenAIProvider] Deleting config...')
     try {
-      await invoke('delete_azure_openai_config')
+      await deleteConfig.mutateAsync()
       console.log('[AzureOpenAIProvider] Config deleted successfully')
-      setExistingConfig(null)
-      setState({
-        testResult: null,
-        saveSuccess: false,
-        errorMessage: null,
-        isTesting: false,
-        isLoading: false,
-      })
+      setSaveSuccess(false)
+      form.reset()
     } catch (e) {
       console.error('[AzureOpenAIProvider] Failed to delete config:', e)
-      setState((prev) => ({ ...prev, errorMessage: `Failed to delete: ${e}` }))
     }
   }
 
-  if (state.isLoading) {
+  // Derive error message from mutations
+  const errorMessage =
+    saveConfig.error?.message || deleteConfig.error?.message
+
+  if (isLoading) {
     return (
       <ProviderSection
         provider="azure_open_ai"
@@ -147,28 +127,6 @@ export function AzureOpenAIProvider({
       onToggleExpand={onToggleExpand}
       onToggleActive={onToggleActive}
     >
-      {/* Existing config display */}
-      {existingConfig && (
-        <div className="p-3 bg-muted rounded-lg mb-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Current API Key</p>
-              <p className="font-mono text-sm">{maskApiKey(existingConfig.api_key)}</p>
-            </div>
-            <Button variant="destructive" size="sm" onClick={handleDelete}>
-              Delete
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {existingConfig?.endpoint && (
-        <div className="p-3 bg-muted rounded-lg mb-4">
-          <p className="text-sm text-muted-foreground">Current Endpoint</p>
-          <p className="font-mono text-sm break-all">{existingConfig.endpoint}</p>
-        </div>
-      )}
-
       {/* Form */}
       <form
         onSubmit={(e) => {
@@ -179,7 +137,9 @@ export function AzureOpenAIProvider({
         className="space-y-4"
       >
         <div className="space-y-2">
-          <Label htmlFor="azure-endpoint">Azure Endpoint</Label>
+          <Label htmlFor="azure-endpoint">
+            {existingConfig ? 'Update Azure Endpoint' : 'Azure Endpoint'}
+          </Label>
           <form.Field
             name="endpoint"
             validators={{
@@ -196,15 +156,14 @@ export function AzureOpenAIProvider({
                 <Input
                   id="azure-endpoint"
                   type="url"
-                  placeholder="https://your-resource.openai.azure.com"
+                  placeholder={
+                    existingConfig?.endpoint ||
+                    'https://your-resource.openai.azure.com'
+                  }
                   value={field.state.value}
                   onChange={(e) => {
                     field.handleChange(e.target.value)
-                    setState((prev) => ({
-                      ...prev,
-                      testResult: null,
-                      saveSuccess: false,
-                    }))
+                    setSaveSuccess(false)
                   }}
                   onBlur={field.handleBlur}
                 />
@@ -234,21 +193,30 @@ export function AzureOpenAIProvider({
           >
             {(field) => (
               <div className="space-y-1">
-                <Input
-                  id="azure-api-key"
-                  type="password"
-                  placeholder="Your Azure API key"
-                  value={field.state.value}
-                  onChange={(e) => {
-                    field.handleChange(e.target.value)
-                    setState((prev) => ({
-                      ...prev,
-                      testResult: null,
-                      saveSuccess: false,
-                    }))
-                  }}
-                  onBlur={field.handleBlur}
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="azure-api-key"
+                    type="password"
+                    placeholder={existingConfig ? MASKED_API_KEY_PLACEHOLDER : 'Your Azure API key'}
+                    value={field.state.value}
+                    onChange={(e) => {
+                      field.handleChange(e.target.value)
+                      setSaveSuccess(false)
+                    }}
+                    onBlur={field.handleBlur}
+                    className="flex-1"
+                  />
+                  {existingConfig && (
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={handleDelete}
+                      disabled={deleteConfig.isPending}
+                    >
+                      {deleteConfig.isPending ? 'Deleting...' : 'Delete'}
+                    </Button>
+                  )}
+                </div>
                 {field.state.meta.isTouched && field.state.meta.errors.length > 0 && (
                   <p className="text-sm text-destructive">
                     {field.state.meta.errors.join(', ')}
@@ -260,13 +228,17 @@ export function AzureOpenAIProvider({
         </div>
 
         {/* Feedback messages */}
-        {state.errorMessage && (
-          <p className="text-sm text-destructive">{state.errorMessage}</p>
-        )}
-        {state.testResult === 'success' && (
-          <p className="text-sm text-green-600">Configuration is valid!</p>
-        )}
-        {state.saveSuccess && (
+        <form.Subscribe selector={(state) => state.errorMap}>
+          {(errorMap) => (
+            <>
+              {errorMap.onSubmit && (
+                <p className="text-sm text-destructive">{errorMap.onSubmit}</p>
+              )}
+            </>
+          )}
+        </form.Subscribe>
+        {errorMessage && <p className="text-sm text-destructive">{errorMessage}</p>}
+        {saveSuccess && (
           <p className="text-sm text-green-600">Configuration saved successfully!</p>
         )}
 
@@ -276,27 +248,15 @@ export function AzureOpenAIProvider({
             selector={(formState) => ({
               canSubmit: formState.canSubmit,
               isSubmitting: formState.isSubmitting,
-              apiKey: formState.values.apiKey,
-              endpoint: formState.values.endpoint,
             })}
           >
-            {({ canSubmit, isSubmitting, apiKey, endpoint }) => (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleTest}
-                  disabled={!apiKey || !endpoint || state.isTesting || !canSubmit}
-                >
-                  {state.isTesting ? 'Testing...' : 'Test Configuration'}
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={!canSubmit || isSubmitting || state.testResult !== 'success'}
-                >
-                  {isSubmitting ? 'Saving...' : 'Save'}
-                </Button>
-              </>
+            {({ canSubmit, isSubmitting }) => (
+              <Button
+                type="submit"
+                disabled={!canSubmit || isSubmitting}
+              >
+                {isSubmitting || saveConfig.isPending ? 'Saving...' : 'Save'}
+              </Button>
             )}
           </form.Subscribe>
         </div>

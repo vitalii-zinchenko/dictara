@@ -33,6 +33,7 @@ pub fn restart_app(app: tauri::AppHandle) {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn stop_recording(sender: State<RecordingCommandSender>) -> Result<(), String> {
     sender
         .sender
@@ -43,6 +44,7 @@ pub fn stop_recording(sender: State<RecordingCommandSender>) -> Result<(), Strin
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn cancel_recording(sender: State<RecordingCommandSender>) -> Result<(), String> {
     sender
         .sender
@@ -68,6 +70,7 @@ pub fn load_app_config(app: tauri::AppHandle) -> Result<AppConfig, String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn save_app_config(
     app: tauri::AppHandle,
     active_provider: Option<String>,
@@ -98,6 +101,7 @@ pub fn save_app_config(
 // ===== OPENAI PROVIDER COMMANDS =====
 
 #[tauri::command]
+#[specta::specta]
 pub fn load_openai_config() -> Result<Option<OpenAIConfig>, String> {
     println!("[Command] load_openai_config called");
     keychain::load_provider_config::<OpenAIConfig>(ProviderAccount::OpenAI).map_err(|e| {
@@ -108,6 +112,7 @@ pub fn load_openai_config() -> Result<Option<OpenAIConfig>, String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn save_openai_config(api_key: String) -> Result<(), String> {
     println!(
         "[Command] save_openai_config called with key length: {}",
@@ -124,6 +129,7 @@ pub fn save_openai_config(api_key: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn delete_openai_config() -> Result<(), String> {
     println!("[Command] delete_openai_config called");
     keychain::delete_provider_config(ProviderAccount::OpenAI).map_err(|e| {
@@ -134,6 +140,7 @@ pub fn delete_openai_config() -> Result<(), String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn test_openai_config(api_key: String) -> Result<bool, String> {
     println!("[Command] test_openai_config called");
 
@@ -149,6 +156,7 @@ pub fn test_openai_config(api_key: String) -> Result<bool, String> {
 // ===== AZURE OPENAI PROVIDER COMMANDS =====
 
 #[tauri::command]
+#[specta::specta]
 pub fn load_azure_openai_config() -> Result<Option<AzureOpenAIConfig>, String> {
     println!("[Command] load_azure_openai_config called");
     keychain::load_provider_config::<AzureOpenAIConfig>(ProviderAccount::AzureOpenAI).map_err(|e| {
@@ -159,6 +167,7 @@ pub fn load_azure_openai_config() -> Result<Option<AzureOpenAIConfig>, String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn save_azure_openai_config(api_key: String, endpoint: String) -> Result<(), String> {
     println!(
         "[Command] save_azure_openai_config called with key length: {}, endpoint: {}",
@@ -176,6 +185,7 @@ pub fn save_azure_openai_config(api_key: String, endpoint: String) -> Result<(),
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn delete_azure_openai_config() -> Result<(), String> {
     println!("[Command] delete_azure_openai_config called");
     keychain::delete_provider_config(ProviderAccount::AzureOpenAI).map_err(|e| {
@@ -186,6 +196,7 @@ pub fn delete_azure_openai_config() -> Result<(), String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn test_azure_openai_config(api_key: String, endpoint: String) -> Result<bool, String> {
     println!("[Command] test_azure_openai_config called");
 
@@ -201,6 +212,7 @@ pub fn test_azure_openai_config(api_key: String, endpoint: String) -> Result<boo
 // ===== AUDIO LEVEL CHANNEL =====
 
 #[tauri::command]
+#[specta::specta]
 pub fn register_audio_level_channel(
     channel: Channel<f32>,
     state: State<AudioLevelChannel>,
@@ -213,6 +225,7 @@ pub fn register_audio_level_channel(
 // ===== ERROR HANDLING =====
 
 #[tauri::command]
+#[specta::specta]
 pub fn retry_transcription(sender: State<RecordingCommandSender>) -> Result<(), String> {
     println!("[Command] retry_transcription called");
 
@@ -225,6 +238,7 @@ pub fn retry_transcription(sender: State<RecordingCommandSender>) -> Result<(), 
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn dismiss_error(
     app: tauri::AppHandle,
     last_recording_state: State<LastRecordingState>,
@@ -245,6 +259,7 @@ pub fn dismiss_error(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn resize_popup_for_error(app: tauri::AppHandle) -> Result<(), String> {
     println!("[Command] resize_popup_for_error called");
 

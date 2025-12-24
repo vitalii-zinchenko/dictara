@@ -306,6 +306,7 @@ fn install_pending_update(app_handle: &tauri::AppHandle, updater_state: &Updater
 /// Manual update check triggered from frontend
 /// Returns: true if update is available, false otherwise
 #[tauri::command]
+#[specta::specta]
 pub async fn check_for_updates(
     app_handle: tauri::AppHandle,
     show_no_update_message: bool,

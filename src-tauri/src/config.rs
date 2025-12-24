@@ -22,13 +22,13 @@ pub struct AppConfig {
 }
 
 /// OpenAI provider configuration (stored in keychain)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct OpenAIConfig {
     pub api_key: String,
 }
 
 /// Azure OpenAI provider configuration (stored in keychain)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct AzureOpenAIConfig {
     pub api_key: String,
     pub endpoint: String,

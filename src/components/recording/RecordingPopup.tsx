@@ -1,10 +1,18 @@
-import { Channel, invoke } from "@tauri-apps/api/core";
+import { Channel } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Mirage } from "ldrs/react";
 import "ldrs/react/Mirage.css";
 import { Square, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import "./RecordingPopup.css";
+import {
+  useCancelRecording,
+  useStopRecording,
+  useRetryTranscription,
+  useDismissError,
+  useResizePopupForError,
+} from "@/hooks/useRecording";
+import { commands } from "@/bindings";
 
 // Maximum recording duration (10 minutes). Change to 10000 for 10-second testing
 const MAX_RECORDING_DURATION_MS = 10 * 60 * 1000;
@@ -27,6 +35,13 @@ function RecordingPopup() {
   const animationFrameRef = useRef<number | undefined>(undefined);
   const startTimeRef = useRef<number | undefined>(undefined);
   const timerIntervalRef = useRef<NodeJS.Timeout | undefined>(undefined);
+
+  // TanStack Query mutation hooks
+  const cancelRecording = useCancelRecording();
+  const stopRecording = useStopRecording();
+  const retryTranscription = useRetryTranscription();
+  const dismissError = useDismissError();
+  const resizePopupForError = useResizePopupForError();
 
   // Smooth the audio level using requestAnimationFrame
   useEffect(() => {
@@ -52,7 +67,7 @@ function RecordingPopup() {
   const handleCancel = async () => {
     console.log("Cancel clicked");
     try {
-      await invoke("cancel_recording");
+      await cancelRecording.mutateAsync();
     } catch (error) {
       console.error("Failed to cancel recording:", error);
     }
@@ -61,7 +76,7 @@ function RecordingPopup() {
   const handleStop = async () => {
     console.log("Stop recording clicked");
     try {
-      await invoke("stop_recording");
+      await stopRecording.mutateAsync();
     } catch (error) {
       console.error("Failed to stop recording:", error);
     }
@@ -73,7 +88,7 @@ function RecordingPopup() {
     setTranscribing(true);
 
     try {
-      await invoke("retry_transcription");
+      await retryTranscription.mutateAsync();
     } catch (err) {
       console.error("Retry failed:", err);
       // Error will be re-emitted via event
@@ -84,7 +99,7 @@ function RecordingPopup() {
     console.log("Dismiss clicked");
 
     try {
-      await invoke("dismiss_error");
+      await dismissError.mutateAsync();
     } catch (err) {
       console.error("Failed to dismiss:", err);
     }
@@ -139,15 +154,14 @@ function RecordingPopup() {
       };
 
       try {
-        await invoke("register_audio_level_channel", {
-          channel: audioLevelChannel,
-        });
+        const result = await commands.registerAudioLevelChannel(audioLevelChannel);
+        if (result.status === 'error') {
+          throw new Error(result.error);
+        }
+        console.log("[Popup] Audio level channel registered");
       } catch (error) {
         console.error("[Popup] Failed to register audio level channel:", error);
       }
-
-
-      console.log("[Popup] Audio level channel registered");
     };
 
     setupAudioLevelChannel();
@@ -193,7 +207,7 @@ function RecordingPopup() {
 
         // Resize window for error display
         try {
-          await invoke("resize_popup_for_error");
+          await resizePopupForError.mutateAsync();
         } catch (err) {
           console.error("Failed to resize popup:", err);
         }
@@ -259,14 +273,16 @@ function RecordingPopup() {
             {error.can_retry && (
               <button
                 onClick={handleRetry}
-                className="h-6 px-3 text-xs rounded bg-gray-600 hover:bg-gray-500 text-white font-medium transition-colors flex items-center"
+                disabled={retryTranscription.isPending}
+                className="h-6 px-3 text-xs rounded bg-gray-600 hover:bg-gray-500 text-white font-medium transition-colors flex items-center disabled:opacity-50"
               >
-                Retry
+                {retryTranscription.isPending ? 'Retrying...' : 'Retry'}
               </button>
             )}
             <button
               onClick={handleDismiss}
-              className="w-6 h-6 rounded bg-gray-600 hover:bg-gray-500 flex items-center justify-center transition-colors"
+              disabled={dismissError.isPending}
+              className="w-6 h-6 rounded bg-gray-600 hover:bg-gray-500 flex items-center justify-center transition-colors disabled:opacity-50"
             >
               <X className="w-4 h-4 text-white" strokeWidth={2.5} />
             </button>
@@ -301,7 +317,8 @@ function RecordingPopup() {
             {/* Cancel Button */}
             <button
               onClick={handleCancel}
-              className="w-6 h-6 aspect-square rounded-lg shrink-0 bg-gray-700 hover:bg-gray-600 flex items-center justify-center transition-colors cursor-pointer"
+              disabled={cancelRecording.isPending}
+              className="w-6 h-6 aspect-square rounded-lg shrink-0 bg-gray-700 hover:bg-gray-600 flex items-center justify-center transition-colors cursor-pointer disabled:opacity-50"
             >
               <X className="w-4 h-4 text-white" strokeWidth={2.5} />
             </button>
@@ -309,7 +326,8 @@ function RecordingPopup() {
             {/* Stop Recording Button */}
             <button
               onClick={handleStop}
-              className="w-6 h-6 aspect-square rounded-lg shrink-0 bg-red-500 hover:bg-red-600 flex items-center justify-center transition-colors cursor-pointer"
+              disabled={stopRecording.isPending}
+              className="w-6 h-6 aspect-square rounded-lg shrink-0 bg-red-500 hover:bg-red-600 flex items-center justify-center transition-colors cursor-pointer disabled:opacity-50"
             >
               <Square className="w-3 h-3 text-white" fill="white" strokeWidth={0} />
             </button>

@@ -1,18 +1,14 @@
-import { invoke } from '@tauri-apps/api/core'
-import { useState } from 'react'
 import { Button } from '../ui/button'
+import { useCheckForUpdates } from '@/hooks/useCheckForUpdates'
 
 export function Updates() {
-  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false)
+  const checkForUpdates = useCheckForUpdates()
 
   const handleCheckForUpdates = async () => {
-    setIsCheckingUpdates(true)
     try {
-      await invoke('check_for_updates', { showNoUpdateMessage: true })
+      await checkForUpdates.mutateAsync({ showNoUpdateMessage: true })
     } catch (e) {
       console.error('[Updates] Failed to check for updates:', e)
-    } finally {
-      setIsCheckingUpdates(false)
     }
   }
 
@@ -26,9 +22,9 @@ export function Updates() {
       <Button
         variant="outline"
         onClick={handleCheckForUpdates}
-        disabled={isCheckingUpdates}
+        disabled={checkForUpdates.isPending}
       >
-        {isCheckingUpdates ? 'Checking...' : 'Check for Updates'}
+        {checkForUpdates.isPending ? 'Checking...' : 'Check for Updates'}
       </Button>
     </div>
   )
