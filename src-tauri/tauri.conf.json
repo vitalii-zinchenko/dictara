@@ -32,7 +32,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": "dmg",
     "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
