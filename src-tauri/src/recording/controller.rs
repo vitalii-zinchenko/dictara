@@ -184,11 +184,6 @@ impl Controller {
         // Play start sound
         sound_player::play_start();
 
-        // Update tray icon to recording state
-        if let Err(e) = crate::ui::tray::set_recording_icon(&self.app_handle) {
-            eprintln!("[Controller] Failed to set recording icon: {}", e);
-        }
-
         // Show recording popup window
         if let Err(e) = open_recording_popup(&self.app_handle) {
             eprintln!("[Controller] Failed to open recording popup: {}", e);
@@ -287,11 +282,6 @@ impl Controller {
                     eprintln!("[Controller] Failed to enable paste menu item: {}", e);
                 }
 
-                // Restore tray icon to default state
-                if let Err(e) = crate::ui::tray::set_default_icon(&self.app_handle) {
-                    eprintln!("[Controller] Failed to set default icon: {}", e);
-                }
-
                 // Hide recording popup window
                 if let Err(e) = close_recording_popup(&self.app_handle) {
                     eprintln!("[Controller] Failed to close recording popup: {}", e);
@@ -318,11 +308,6 @@ impl Controller {
                 // Disable the paste menu item since there's no text to paste
                 if let Err(err) = crate::ui::tray::update_paste_menu_item(&self.app_handle, false) {
                     eprintln!("[Controller] Failed to disable paste menu item: {}", err);
-                }
-
-                // Restore tray icon to default state
-                if let Err(err) = crate::ui::tray::set_default_icon(&self.app_handle) {
-                    eprintln!("[Controller] Failed to set default icon: {}", err);
                 }
 
                 // DON'T close popup - keep it open to show error
@@ -355,11 +340,6 @@ impl Controller {
 
         // Clean up the cancelled recording file immediately
         cleanup_recording_file(&recording_result.file_path);
-
-        // Restore tray icon to default state
-        if let Err(e) = crate::ui::tray::set_default_icon(&self.app_handle) {
-            eprintln!("[Controller] Failed to set default icon: {}", e);
-        }
 
         // Hide recording popup window
         if let Err(e) = close_recording_popup(&self.app_handle) {
@@ -448,11 +428,6 @@ impl Controller {
                     eprintln!("[Controller] Failed to enable paste menu item: {}", e);
                 }
 
-                // Restore tray icon to default state
-                if let Err(e) = crate::ui::tray::set_default_icon(&self.app_handle) {
-                    eprintln!("[Controller] Failed to set default icon: {}", e);
-                }
-
                 // Hide recording popup window
                 if let Err(e) = close_recording_popup(&self.app_handle) {
                     eprintln!("[Controller] Failed to close recording popup: {}", e);
@@ -478,11 +453,6 @@ impl Controller {
                 // Disable the paste menu item since there's no text to paste
                 if let Err(err) = crate::ui::tray::update_paste_menu_item(&self.app_handle, false) {
                     eprintln!("[Controller] Failed to disable paste menu item: {}", err);
-                }
-
-                // Restore tray icon to default state
-                if let Err(err) = crate::ui::tray::set_default_icon(&self.app_handle) {
-                    eprintln!("[Controller] Failed to set default icon: {}", err);
                 }
 
                 // DON'T close popup - keep it open to show error
