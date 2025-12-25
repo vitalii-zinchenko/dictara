@@ -5,4 +5,4 @@ Also, you can clone source code for other libraries if you need so.
 
 # Code changes workflow:
 
-IMPORTANT: After you make changes you must run `npm run be:check` to check if there are any errors.
+IMPORTANT: After you make changes you must run `npm run verify` to check if there are any errors, and fix all errors and warnings.

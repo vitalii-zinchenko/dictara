@@ -6,11 +6,7 @@ use crate::{
     keyboard_listener::KeyListener,
     keychain::{self, ProviderAccount},
     recording::{Controller, LastRecording, LastRecordingState, RecordingCommand},
-    ui::{
-        menu::build_menu,
-        tray::{PasteMenuItemState, TrayIconState},
-        window,
-    },
+    ui::{menu::build_menu, tray::PasteMenuItemState, window},
 };
 use std::sync::{atomic::AtomicU8, Arc, Mutex};
 use tauri::ipc::Channel;
@@ -127,9 +123,17 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
         item: menu_with_items.paste_last_item,
     };
 
-    // Build tray icon
-    let tray = tauri::tray::TrayIconBuilder::new()
-        .icon(app.default_window_icon().unwrap().clone())
+    // Build tray icon with template image for menu bar
+    const TRAY_ICON_BYTES: &[u8] = include_bytes!("../icons/tray-icon.png");
+    let tray_icon_image = image::load_from_memory(TRAY_ICON_BYTES)
+        .expect("Failed to load tray icon")
+        .to_rgba8();
+    let (width, height) = tray_icon_image.dimensions();
+    let tray_icon = tauri::image::Image::new_owned(tray_icon_image.into_raw(), width, height);
+
+    let _tray = tauri::tray::TrayIconBuilder::new()
+        .icon(tray_icon)
+        .icon_as_template(true) // macOS template image - auto-adapts to light/dark mode
         .menu(&menu_with_items.menu)
         .show_menu_on_left_click(true)
         .on_menu_event(|app, event| {
@@ -175,11 +179,6 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
         })
         .build(app)?;
 
-    // Store tray icon in app state for dynamic icon updates
-    let tray_state = TrayIconState {
-        tray: Mutex::new(Some(tray)),
-    };
-    app.manage(tray_state);
     app.manage(paste_menu_item_state);
 
     // Initialize and start the updater (only in release builds)
