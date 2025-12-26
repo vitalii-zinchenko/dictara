@@ -1,68 +1,120 @@
-:root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+@import "tailwindcss";
+@plugin "tailwindcss-animate";
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+@theme {
+  /* Cool gradient: Purple → Blue → Cyan */
+  --color-cool-purple: #8b5cf6;
+  --color-cool-blue: #3b82f6;
+  --color-cool-cyan: #06b6d4;
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+  /* Warm gradient: Coral-pink → Orange → Golden */
+  --color-warm-coral: #e879a0;
+  --color-warm-orange: #f59e6b;
+  --color-warm-golden: #fbbf4a;
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
+  /* Dark backgrounds */
+  --color-background: #0f0a1a;
+  --color-background-lighter: #1a1425;
+  --color-background-card: #1e162b;
 
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
+  /* Font family */
+  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, sans-serif;
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+  /* Animations */
+  --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-wave-1: wave 1.5s ease-in-out infinite;
+  --animate-wave-2: wave 1.5s ease-in-out 0.1s infinite;
+  --animate-wave-3: wave 1.5s ease-in-out 0.2s infinite;
+  --animate-wave-4: wave 1.5s ease-in-out 0.3s infinite;
+  --animate-wave-5: wave 1.5s ease-in-out 0.4s infinite;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-glow: glow 2s ease-in-out infinite alternate;
 }
 
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
+@keyframes wave {
+  0%,
+  100% {
+    transform: scaleY(0.5);
   }
-  a:hover {
-    color: #747bff;
+  50% {
+    transform: scaleY(1);
   }
-  button {
-    background-color: #f9f9f9;
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes glow {
+  0% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-white antialiased;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
+  }
+}
+
+@layer utilities {
+  .text-gradient-cool {
+    background: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 50%, #06b6d4 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .text-gradient-warm {
+    background: linear-gradient(135deg, #e879a0 0%, #f59e6b 50%, #fbbf4a 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .bg-gradient-cool {
+    background: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 50%, #06b6d4 100%);
+  }
+
+  .bg-gradient-warm {
+    background: linear-gradient(135deg, #e879a0 0%, #f59e6b 50%, #fbbf4a 100%);
+  }
+
+  /* Radial gradient orbs for background effects */
+  .bg-radial-purple {
+    background: radial-gradient(ellipse at center, rgba(139, 92, 246, 0.3) 0%, transparent 70%);
+  }
+
+  .bg-radial-cyan {
+    background: radial-gradient(ellipse at center, rgba(6, 182, 212, 0.25) 0%, transparent 70%);
+  }
+
+  .bg-radial-coral {
+    background: radial-gradient(ellipse at center, rgba(232, 121, 160, 0.15) 0%, transparent 70%);
+  }
+
+  .bg-radial-purple-soft {
+    background: radial-gradient(ellipse at center, rgba(139, 92, 246, 0.05) 0%, transparent 70%);
+  }
+
+  .bg-radial-coral-soft {
+    background: radial-gradient(ellipse at center, rgba(232, 121, 160, 0.05) 0%, transparent 70%);
   }
 }
