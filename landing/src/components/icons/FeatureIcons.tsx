@@ -31,7 +31,11 @@ export function IconLanguages(props: IconProps) {
       <path d="M2.5 6h17M2.5 18h17" stroke="currentColor" strokeWidth="1.5" opacity="0.6" />
       {/* Speech indicator - bigger */}
       <circle cx="19" cy="4" r="4" fill="currentColor" />
-      <text x="19" y="5.5" textAnchor="middle" fontSize="5.5" fill="var(--background, #0f0a1a)" fontWeight="bold">A</text>
+      {/* Letter A as path */}
+      <path
+        d="M19 1.5l-2 5h1l.3-.8h1.4l.3.8h1l-2-5zm0 1.2l.5 1.3h-1l.5-1.3z"
+        fill="var(--background, #0f0a1a)"
+      />
     </svg>
   );
 }
@@ -78,8 +82,10 @@ export function IconWorkflow(props: IconProps) {
       {/* Key cap */}
       <rect x="2" y="7" width="20" height="15" rx="2.5" stroke="currentColor" strokeWidth="1.5" />
       <rect x="4" y="9" width="16" height="11" rx="1.5" stroke="currentColor" strokeWidth="1" opacity="0.5" />
-      {/* FN text */}
-      <text x="12" y="17" textAnchor="middle" fontSize="7" fill="currentColor" fontWeight="bold" fontFamily="system-ui">FN</text>
+      {/* FN as paths - F letter */}
+      <path d="M7 12v6M7 12h3M7 15h2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      {/* N letter */}
+      <path d="M13 18v-6l4 6v-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       {/* Tap indicator */}
       <path d="M12 1v3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       <path d="M8 3l4-2 4 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
