@@ -1,4 +1,4 @@
-import { Github, Heart } from "lucide-react";
+import { Github } from "lucide-react";
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
@@ -39,12 +39,6 @@ export function Footer() {
           </div>
         </div>
 
-        {/* Made with love */}
-        <div className="mt-8 pt-6 border-t border-white/5 text-center">
-          <p className="text-sm text-white/40 flex items-center justify-center gap-1">
-            Made with <Heart className="w-4 h-4 text-warm-coral fill-warm-coral" /> for productivity
-          </p>
-        </div>
       </div>
     </footer>
   );

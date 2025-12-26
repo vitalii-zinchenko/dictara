@@ -32,17 +32,19 @@ export function Hero() {
 
       {/* Content */}
       <div className="relative z-10 max-w-4xl mx-auto px-6 text-center">
-        {/* Tagline */}
-        <p className="text-xl sm:text-2xl md:text-3xl text-white/80 font-medium mb-4 max-w-2xl mx-auto">
-          Stop typing.{" "}
-          <span className="text-gradient-warm">Start speaking.</span>
+        {/* Big - Main headline */}
+        <h1 className="text-2xl sm:text-4xl md:text-5xl font-bold text-white mb-6 whitespace-nowrap">
+          Typing is slow. <span className="text-gradient-warm">Speaking isn't.</span>
+        </h1>
+
+        {/* Middle - Tagline badges */}
+        <p className="text-lg sm:text-xl md:text-2xl text-white/70 font-medium mb-4 max-w-2xl mx-auto">
+          Free · Bring Your Own Key · <span className="text-gradient-cool">Speech-to-Text</span>
         </p>
 
-        {/* Description */}
+        {/* Small - Description */}
         <p className="text-base sm:text-lg text-white/60 mb-10 max-w-xl mx-auto leading-relaxed">
-          Transform your voice into text instantly. Press a key, speak your
-          mind, and watch your words appear like magic. Powered by OpenAI
-          Whisper.
+          Turn your spoken words into text — in any app, any language.
         </p>
 
         {/* CTA Buttons */}

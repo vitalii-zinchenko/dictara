@@ -34,14 +34,14 @@ const features = [
     icon: Keyboard,
     title: "Simple Workflow",
     description:
-      "Just press the FN key to start recording, release to transcribe. No complicated menus.",
+      "Hold FN to record, release to transcribe. Or press FN+Space for hands-free dictation.",
     gradient: "from-cool-blue to-cool-cyan",
   },
   {
     icon: Copy,
-    title: "Auto Copy",
+    title: "Auto Paste",
     description:
-      "Transcribed text is automatically copied to your clipboard. Ready to paste anywhere.",
+      "Transcribed text is automatically pasted wherever your cursor is. No extra steps needed.",
     gradient: "from-warm-orange to-warm-golden",
   },
 ];
