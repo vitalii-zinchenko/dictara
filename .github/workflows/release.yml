@@ -1,10 +1,10 @@
-name: "Release"
+name: 'Release'
 
 on:
   workflow_dispatch:
     inputs:
       prerelease:
-        description: "Mark as pre-release (unstable)"
+        description: 'Mark as pre-release (unstable)'
         required: true
         default: false
         type: boolean
@@ -28,7 +28,7 @@ jobs:
         id: read_version
         with:
           file: ${{ env.APP_CARGO_TOML }}
-          field: "package.version"
+          field: 'package.version'
 
       - name: Set tag name
         id: set_tag
@@ -46,9 +46,8 @@ jobs:
         include:
           - platform: macos-latest
             args: --target aarch64-apple-darwin
-          # Uncomment to add Intel Mac support
-          # - platform: macos-latest
-          #   args: --target x86_64-apple-darwin
+          - platform: macos-latest
+            args: --target x86_64-apple-darwin
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -74,7 +73,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
-          cache: "npm"
+          cache: 'npm'
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -111,8 +110,8 @@ jobs:
           args: ${{ matrix.args }} --config src-tauri/tauri.prod.conf.json
           # Release configuration
           tagName: v__VERSION__
-          releaseName: "Dictara v__VERSION__"
-          releaseBody: "See the assets to download and install this version."
+          releaseName: 'Dictara v__VERSION__'
+          releaseBody: 'See the assets to download and install this version.'
           # IMPORTANT: releaseDraft must be false for updater to work!
           releaseDraft: false
           prerelease: ${{ inputs.prerelease }}

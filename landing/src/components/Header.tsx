@@ -1,7 +1,10 @@
-import { Github, Download } from "lucide-react";
+import { Github, Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useDownload } from "@/hooks/useDownload";
 
 export function Header() {
+  const { download, isLoading, isSupported } = useDownload();
+
   return (
     <header className="fixed top-0 left-0 right-0 z-50">
       <div className="mx-auto max-w-6xl px-6 py-4">
@@ -25,15 +28,17 @@ export function Header() {
             <Button
               variant="warm"
               size="sm"
-              onClick={() =>
-                window.open(
-                  "https://github.com/vitalii-zinchenko/dictara/releases",
-                  "_blank"
-                )
-              }
+              onClick={download}
+              disabled={isLoading}
             >
-              <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">Download</span>
+              {isLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              <span className="hidden sm:inline">
+                {isLoading ? "Loading..." : isSupported ? "Download" : "View Releases"}
+              </span>
             </Button>
           </div>
         </nav>

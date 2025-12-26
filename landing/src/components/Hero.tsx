@@ -1,7 +1,26 @@
-import { Download, Apple } from "lucide-react";
+import { Download, Apple, Loader2, Monitor } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useDownload } from "@/hooks/useDownload";
 
 export function Hero() {
+  const { download, isLoading, isSupported, platform, platformLabel } = useDownload();
+
+  const getPlatformIcon = () => {
+    if (platform === "mac-arm" || platform === "mac-intel") {
+      return <Apple className="w-4 h-4" />;
+    }
+    return <Monitor className="w-4 h-4" />;
+  };
+
+  const getPlatformMessage = () => {
+    if (isLoading) return "Detecting platform...";
+    if (isSupported) return `Available for ${platformLabel}`;
+    if (platform === "mac-intel") return "Intel Mac support coming soon";
+    if (platform === "windows") return "Windows support coming soon";
+    if (platform === "linux") return "Linux support coming soon";
+    return "Currently available for macOS";
+  };
+
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
       {/* Background gradient orbs */}
@@ -32,29 +51,32 @@ export function Hero() {
             variant="warm"
             size="xl"
             className="w-full sm:w-auto"
-            onClick={() =>
-              window.open(
-                "https://github.com/vitalii-zinchenko/dictara/releases",
-                "_blank"
-              )
-            }
+            onClick={download}
+            disabled={isLoading}
           >
-            <Download className="w-5 h-5" />
-            Download
+            {isLoading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Download className="w-5 h-5" />
+            )}
+            {isLoading ? "Loading..." : isSupported ? "Download" : "View Releases"}
           </Button>
-
         </div>
 
         {/* Platform indicator */}
         <div className="mt-6 flex items-center justify-center gap-2 text-white/40 text-sm">
-          <Apple className="w-4 h-4" />
-          <span>Available for macOS</span>
+          {getPlatformIcon()}
+          <span>{getPlatformMessage()}</span>
         </div>
-
       </div>
 
       {/* Scroll indicator */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-white/40 animate-bounce">
+      <button
+        onClick={() => {
+          document.getElementById("features")?.scrollIntoView({ behavior: "smooth" });
+        }}
+        className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-white/40 hover:text-white/60 transition-colors cursor-pointer"
+      >
         <span className="text-xs uppercase tracking-widest">Scroll</span>
         <svg
           width="20"
@@ -71,7 +93,7 @@ export function Hero() {
             strokeLinejoin="round"
           />
         </svg>
-      </div>
+      </button>
     </section>
   );
 }
