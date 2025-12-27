@@ -1,10 +1,12 @@
 import { getVersion } from '@tauri-apps/api/app'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { ExternalLink } from 'lucide-react'
+import { ExternalLink, RotateCcw } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { commands } from '@/bindings'
 
 export function About() {
   const [appVersion, setAppVersion] = useState<string | null>(null)
+  const [isRestarting, setIsRestarting] = useState(false)
 
   useEffect(() => {
     getVersion()
@@ -19,6 +21,20 @@ export function About() {
 
   const handleOpenGitHub = () => {
     openUrl('https://github.com/vitalii-zinchenko/dictara')
+  }
+
+  const handleRestartOnboarding = async () => {
+    setIsRestarting(true)
+    try {
+      const result = await commands.restartOnboarding()
+      if (result.status === 'error') {
+        console.error('[About] Failed to restart onboarding:', result.error)
+      }
+    } catch (e) {
+      console.error('[About] Failed to restart onboarding:', e)
+    } finally {
+      setIsRestarting(false)
+    }
   }
 
   return (
@@ -39,7 +55,19 @@ export function About() {
           github.com/vitalii-zinchenko/dictara
         </button>
       </div>
+
+      <div className="space-y-2">
+        <p className="text-sm text-muted-foreground">Setup</p>
+        <button
+          type="button"
+          onClick={handleRestartOnboarding}
+          disabled={isRestarting}
+          className="flex items-center gap-2 text-sm text-primary hover:underline disabled:opacity-50"
+        >
+          <RotateCcw className="h-4 w-4" />
+          {isRestarting ? 'Restarting...' : 'Restart Onboarding'}
+        </button>
+      </div>
     </div>
   )
 }
-

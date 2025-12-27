@@ -16,10 +16,10 @@ use objc2_core_graphics::{
 #[cfg(target_os = "macos")]
 use std::{ffi::c_void, ptr::NonNull};
 
-#[cfg(not(target_os = "macos"))]
-use rdev::{listen, Event, EventType, Key, ListenError};
-#[cfg(target_os = "macos")]
-use rdev::{listen, EventType, Key};
+// #[cfg(not(target_os = "macos"))]
+// use rdev::{listen, Event, EventType, Key, ListenError};
+// #[cfg(target_os = "macos")]
+// use rdev::{listen, EventType, Key};
 
 /// Stateful FN key listener
 pub struct KeyListener {
@@ -36,10 +36,10 @@ impl KeyListener {
             Self::start_macos(command_tx, recording_state)
         }
 
-        #[cfg(not(target_os = "macos"))]
-        {
-            return Self::start_rdev(command_tx);
-        }
+        // #[cfg(not(target_os = "macos"))]
+        // {
+        //     return Self::start_rdev(command_tx);
+        // }
     }
 
     #[cfg(target_os = "macos")]
@@ -52,26 +52,26 @@ impl KeyListener {
 
             if let Err(err) = run_event_tap(command_tx.clone(), recording_state.clone()) {
                 eprintln!(
-                    "[FN Key Listener] CGEvent tap failed: {}. Falling back to rdev::listen (emoji picker may appear).",
+                    "[FN Key Listener] CGEvent tap failed: {}. Keyboard shortcuts will not work.",
                     err
                 );
-                if let Err(listen_err) = listen(move |event: rdev::Event| match event.event_type {
-                    EventType::KeyPress(Key::Function) => {
-                        let _ = command_tx.blocking_send(RecordingCommand::FnDown);
-                    }
-                    EventType::KeyRelease(Key::Function) => {
-                        let _ = command_tx.blocking_send(RecordingCommand::FnUp);
-                    }
-                    EventType::KeyPress(Key::Space) => {
-                        let _ = command_tx.blocking_send(RecordingCommand::Lock);
-                    }
-                    _ => {}
-                }) {
-                    eprintln!(
-                        "[FN Key Listener] rdev::listen fallback failed: {:?}",
-                        listen_err
-                    );
-                }
+                // if let Err(listen_err) = listen(move |event: rdev::Event| match event.event_type {
+                //     EventType::KeyPress(Key::Function) => {
+                //         let _ = command_tx.blocking_send(RecordingCommand::FnDown);
+                //     }
+                //     EventType::KeyRelease(Key::Function) => {
+                //         let _ = command_tx.blocking_send(RecordingCommand::FnUp);
+                //     }
+                //     EventType::KeyPress(Key::Space) => {
+                //         let _ = command_tx.blocking_send(RecordingCommand::Lock);
+                //     }
+                //     _ => {}
+                // }) {
+                //     eprintln!(
+                //         "[FN Key Listener] rdev::listen fallback failed: {:?}",
+                //         listen_err
+                //     );
+                // }
             }
         });
 
@@ -80,41 +80,41 @@ impl KeyListener {
         }
     }
 
-    #[cfg(not(target_os = "macos"))]
-    fn start_rdev(command_tx: mpsc::Sender<RecordingCommand>) -> Self {
-        let thread_handle = thread::spawn(move || {
-            println!("[FN Key Listener] Starting global keyboard listener...");
+    // #[cfg(not(target_os = "macos"))]
+    // fn start_rdev(command_tx: mpsc::Sender<RecordingCommand>) -> Self {
+    //     let thread_handle = thread::spawn(move || {
+    //         println!("[FN Key Listener] Starting global keyboard listener...");
 
-            let listen_res = listen(move |event: Event| match event.event_type {
-                EventType::KeyPress(Key::Function) => {
-                    let _ = command_tx.blocking_send(RecordingCommand::FnDown);
-                }
-                EventType::KeyRelease(Key::Function) => {
-                    let _ = command_tx.blocking_send(RecordingCommand::FnUp);
-                }
-                EventType::KeyPress(Key::Space) => {
-                    let _ = command_tx.blocking_send(RecordingCommand::Lock);
-                }
-                _ => {}
-            });
+    //         let listen_res = listen(move |event: Event| match event.event_type {
+    //             EventType::KeyPress(Key::Function) => {
+    //                 let _ = command_tx.blocking_send(RecordingCommand::FnDown);
+    //             }
+    //             EventType::KeyRelease(Key::Function) => {
+    //                 let _ = command_tx.blocking_send(RecordingCommand::FnUp);
+    //             }
+    //             EventType::KeyPress(Key::Space) => {
+    //                 let _ = command_tx.blocking_send(RecordingCommand::Lock);
+    //             }
+    //             _ => {}
+    //         });
 
-            if let Err(error) = listen_res {
-                let error_msg = match error {
-                    ListenError::EventTapError => {
-                        "macOS Accessibility permission denied. Please grant permission and restart."
-                    }
-                    _ => "Keyboard listener failed",
-                };
-                eprintln!("[FN Key Listener] {} ({:?})", error_msg, error);
-            }
+    //         if let Err(error) = listen_res {
+    //             let error_msg = match error {
+    //                 ListenError::EventTapError => {
+    //                     "macOS Accessibility permission denied. Please grant permission and restart."
+    //                 }
+    //                 _ => "Keyboard listener failed",
+    //             };
+    //             eprintln!("[FN Key Listener] {} ({:?})", error_msg, error);
+    //         }
 
-            println!("[FN Key Listener] Thread exiting");
-        });
+    //         println!("[FN Key Listener] Thread exiting");
+    //     });
 
-        Self {
-            _thread_handle: Some(thread_handle),
-        }
-    }
+    //     Self {
+    //         _thread_handle: Some(thread_handle),
+    //     }
+    // }
 }
 
 #[cfg(target_os = "macos")]
