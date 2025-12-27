@@ -21,7 +21,8 @@ jobs:
       version: ${{ steps.read_version.outputs.value }}
       tag_name: ${{ steps.set_tag.outputs.tag_name }}
       tag_exists: ${{ steps.check_tag.outputs.exists }}
-      should_release: ${{ steps.check_tag.outputs.should_release }}
+      is_dev_version: ${{ steps.check_version_format.outputs.is_dev_version }}
+      should_release: ${{ steps.decide_release.outputs.should_release }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,10 +45,40 @@ jobs:
           TAG="v${{ steps.read_version.outputs.value }}"
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "exists=true" >> $GITHUB_OUTPUT
-            echo "should_release=false" >> $GITHUB_OUTPUT
           else
             echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check version format
+        id: check_version_format
+        run: |
+          VERSION="${{ steps.read_version.outputs.value }}"
+          # Check if version is pure semver (x.x.x) without any suffix
+          if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "is_dev_version=false" >> $GITHUB_OUTPUT
+          else
+            echo "is_dev_version=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Decide if should release
+        id: decide_release
+        run: |
+          TAG_EXISTS="${{ steps.check_tag.outputs.exists }}"
+          IS_DEV="${{ steps.check_version_format.outputs.is_dev_version }}"
+          IS_PRERELEASE="${{ inputs.prerelease }}"
+
+          # Block release if:
+          # 1. Tag already exists
+          # 2. Dev version + stable release (not marked as prerelease)
+          if [ "$TAG_EXISTS" = "true" ]; then
+            echo "should_release=false" >> $GITHUB_OUTPUT
+            echo "block_reason=tag_exists" >> $GITHUB_OUTPUT
+          elif [ "$IS_DEV" = "true" ] && [ "$IS_PRERELEASE" = "false" ]; then
+            echo "should_release=false" >> $GITHUB_OUTPUT
+            echo "block_reason=dev_version_stable_release" >> $GITHUB_OUTPUT
+          else
             echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "block_reason=" >> $GITHUB_OUTPUT
           fi
 
       - name: Print Release Info
@@ -58,14 +89,30 @@ jobs:
           echo "║ Version:       ${{ steps.read_version.outputs.value }}"
           echo "║ Tag:           ${{ steps.set_tag.outputs.tag_name }}"
           echo "║ Tag exists:    ${{ steps.check_tag.outputs.exists }}"
+          echo "║ Dev version:   ${{ steps.check_version_format.outputs.is_dev_version }}"
           echo "║ Pre-release:   ${{ inputs.prerelease }}"
-          echo "║ Will release:  ${{ steps.check_tag.outputs.should_release }}"
+          echo "║ Will release:  ${{ steps.decide_release.outputs.should_release }}"
           echo "╚══════════════════════════════════════════════════════════════╝"
 
-          if [ "${{ steps.check_tag.outputs.exists }}" = "true" ]; then
+          BLOCK_REASON="${{ steps.decide_release.outputs.block_reason }}"
+
+          if [ "$BLOCK_REASON" = "tag_exists" ]; then
             echo ""
             echo "⚠️  WARNING: Tag ${{ steps.set_tag.outputs.tag_name }} already exists!"
             echo "⚠️  Skipping release. Bump version in Cargo.toml to create a new release."
+            echo ""
+          elif [ "$BLOCK_REASON" = "dev_version_stable_release" ]; then
+            echo ""
+            echo "❌ ERROR: Cannot create stable release with dev version!"
+            echo ""
+            echo "   Version '${{ steps.read_version.outputs.value }}' contains a pre-release suffix."
+            echo ""
+            echo "   To fix this, either:"
+            echo "   ┌─────────────────────────────────────────────────────────────┐"
+            echo "   │ 1. Check 'Mark as pre-release' to release as unstable       │"
+            echo "   │ 2. Or update version in Cargo.toml to a stable format       │"
+            echo "   │    (e.g., '0.1.13' instead of '0.1.13-dev.1')               │"
+            echo "   └─────────────────────────────────────────────────────────────┘"
             echo ""
           fi
 
