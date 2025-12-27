@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window, recording popup, and preferences",
-  "windows": ["main", "recording-popup", "preferences"],
+  "description": "Capability for the main window, recording popup, preferences, and onboarding",
+  "windows": ["main", "recording-popup", "preferences", "onboarding"],
   "permissions": [
     "core:default",
     "core:window:allow-set-size",
@@ -11,6 +11,6 @@
     "updater:default",
     "core:app:allow-version",
     "dialog:default",
-    "process:allow-restart"
+    "process:default"
   ]
 }

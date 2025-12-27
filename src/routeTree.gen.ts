@@ -11,11 +11,19 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as RecordingPopupRouteRouteImport } from './routes/recording-popup/route'
 import { Route as PreferencesRouteRouteImport } from './routes/preferences/route'
+import { Route as OnboardingRouteRouteImport } from './routes/onboarding/route'
 import { Route as RecordingPopupIndexRouteImport } from './routes/recording-popup/index'
 import { Route as PreferencesIndexRouteImport } from './routes/preferences/index'
+import { Route as OnboardingIndexRouteImport } from './routes/onboarding/index'
 import { Route as PreferencesUpdatesRouteImport } from './routes/preferences/updates'
 import { Route as PreferencesApiKeysRouteImport } from './routes/preferences/api-keys'
 import { Route as PreferencesAboutRouteImport } from './routes/preferences/about'
+import { Route as OnboardingWelcomeRouteImport } from './routes/onboarding/welcome'
+import { Route as OnboardingFnSpaceRouteImport } from './routes/onboarding/fn-space'
+import { Route as OnboardingFnHoldRouteImport } from './routes/onboarding/fn-hold'
+import { Route as OnboardingCompleteRouteImport } from './routes/onboarding/complete'
+import { Route as OnboardingApiKeysRouteImport } from './routes/onboarding/api-keys'
+import { Route as OnboardingAccessibilityRouteImport } from './routes/onboarding/accessibility'
 
 const RecordingPopupRouteRoute = RecordingPopupRouteRouteImport.update({
   id: '/recording-popup',
@@ -27,6 +35,11 @@ const PreferencesRouteRoute = PreferencesRouteRouteImport.update({
   path: '/preferences',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OnboardingRouteRoute = OnboardingRouteRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RecordingPopupIndexRoute = RecordingPopupIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -36,6 +49,11 @@ const PreferencesIndexRoute = PreferencesIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => PreferencesRouteRoute,
+} as any)
+const OnboardingIndexRoute = OnboardingIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => OnboardingRouteRoute,
 } as any)
 const PreferencesUpdatesRoute = PreferencesUpdatesRouteImport.update({
   id: '/updates',
@@ -52,62 +70,139 @@ const PreferencesAboutRoute = PreferencesAboutRouteImport.update({
   path: '/about',
   getParentRoute: () => PreferencesRouteRoute,
 } as any)
+const OnboardingWelcomeRoute = OnboardingWelcomeRouteImport.update({
+  id: '/welcome',
+  path: '/welcome',
+  getParentRoute: () => OnboardingRouteRoute,
+} as any)
+const OnboardingFnSpaceRoute = OnboardingFnSpaceRouteImport.update({
+  id: '/fn-space',
+  path: '/fn-space',
+  getParentRoute: () => OnboardingRouteRoute,
+} as any)
+const OnboardingFnHoldRoute = OnboardingFnHoldRouteImport.update({
+  id: '/fn-hold',
+  path: '/fn-hold',
+  getParentRoute: () => OnboardingRouteRoute,
+} as any)
+const OnboardingCompleteRoute = OnboardingCompleteRouteImport.update({
+  id: '/complete',
+  path: '/complete',
+  getParentRoute: () => OnboardingRouteRoute,
+} as any)
+const OnboardingApiKeysRoute = OnboardingApiKeysRouteImport.update({
+  id: '/api-keys',
+  path: '/api-keys',
+  getParentRoute: () => OnboardingRouteRoute,
+} as any)
+const OnboardingAccessibilityRoute = OnboardingAccessibilityRouteImport.update({
+  id: '/accessibility',
+  path: '/accessibility',
+  getParentRoute: () => OnboardingRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
+  '/onboarding': typeof OnboardingRouteRouteWithChildren
   '/preferences': typeof PreferencesRouteRouteWithChildren
   '/recording-popup': typeof RecordingPopupRouteRouteWithChildren
+  '/onboarding/accessibility': typeof OnboardingAccessibilityRoute
+  '/onboarding/api-keys': typeof OnboardingApiKeysRoute
+  '/onboarding/complete': typeof OnboardingCompleteRoute
+  '/onboarding/fn-hold': typeof OnboardingFnHoldRoute
+  '/onboarding/fn-space': typeof OnboardingFnSpaceRoute
+  '/onboarding/welcome': typeof OnboardingWelcomeRoute
   '/preferences/about': typeof PreferencesAboutRoute
   '/preferences/api-keys': typeof PreferencesApiKeysRoute
   '/preferences/updates': typeof PreferencesUpdatesRoute
+  '/onboarding/': typeof OnboardingIndexRoute
   '/preferences/': typeof PreferencesIndexRoute
   '/recording-popup/': typeof RecordingPopupIndexRoute
 }
 export interface FileRoutesByTo {
+  '/onboarding/accessibility': typeof OnboardingAccessibilityRoute
+  '/onboarding/api-keys': typeof OnboardingApiKeysRoute
+  '/onboarding/complete': typeof OnboardingCompleteRoute
+  '/onboarding/fn-hold': typeof OnboardingFnHoldRoute
+  '/onboarding/fn-space': typeof OnboardingFnSpaceRoute
+  '/onboarding/welcome': typeof OnboardingWelcomeRoute
   '/preferences/about': typeof PreferencesAboutRoute
   '/preferences/api-keys': typeof PreferencesApiKeysRoute
   '/preferences/updates': typeof PreferencesUpdatesRoute
+  '/onboarding': typeof OnboardingIndexRoute
   '/preferences': typeof PreferencesIndexRoute
   '/recording-popup': typeof RecordingPopupIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/onboarding': typeof OnboardingRouteRouteWithChildren
   '/preferences': typeof PreferencesRouteRouteWithChildren
   '/recording-popup': typeof RecordingPopupRouteRouteWithChildren
+  '/onboarding/accessibility': typeof OnboardingAccessibilityRoute
+  '/onboarding/api-keys': typeof OnboardingApiKeysRoute
+  '/onboarding/complete': typeof OnboardingCompleteRoute
+  '/onboarding/fn-hold': typeof OnboardingFnHoldRoute
+  '/onboarding/fn-space': typeof OnboardingFnSpaceRoute
+  '/onboarding/welcome': typeof OnboardingWelcomeRoute
   '/preferences/about': typeof PreferencesAboutRoute
   '/preferences/api-keys': typeof PreferencesApiKeysRoute
   '/preferences/updates': typeof PreferencesUpdatesRoute
+  '/onboarding/': typeof OnboardingIndexRoute
   '/preferences/': typeof PreferencesIndexRoute
   '/recording-popup/': typeof RecordingPopupIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
+    | '/onboarding'
     | '/preferences'
     | '/recording-popup'
+    | '/onboarding/accessibility'
+    | '/onboarding/api-keys'
+    | '/onboarding/complete'
+    | '/onboarding/fn-hold'
+    | '/onboarding/fn-space'
+    | '/onboarding/welcome'
     | '/preferences/about'
     | '/preferences/api-keys'
     | '/preferences/updates'
+    | '/onboarding/'
     | '/preferences/'
     | '/recording-popup/'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/onboarding/accessibility'
+    | '/onboarding/api-keys'
+    | '/onboarding/complete'
+    | '/onboarding/fn-hold'
+    | '/onboarding/fn-space'
+    | '/onboarding/welcome'
     | '/preferences/about'
     | '/preferences/api-keys'
     | '/preferences/updates'
+    | '/onboarding'
     | '/preferences'
     | '/recording-popup'
   id:
     | '__root__'
+    | '/onboarding'
     | '/preferences'
     | '/recording-popup'
+    | '/onboarding/accessibility'
+    | '/onboarding/api-keys'
+    | '/onboarding/complete'
+    | '/onboarding/fn-hold'
+    | '/onboarding/fn-space'
+    | '/onboarding/welcome'
     | '/preferences/about'
     | '/preferences/api-keys'
     | '/preferences/updates'
+    | '/onboarding/'
     | '/preferences/'
     | '/recording-popup/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  OnboardingRouteRoute: typeof OnboardingRouteRouteWithChildren
   PreferencesRouteRoute: typeof PreferencesRouteRouteWithChildren
   RecordingPopupRouteRoute: typeof RecordingPopupRouteRouteWithChildren
 }
@@ -128,6 +223,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PreferencesRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/onboarding': {
+      id: '/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof OnboardingRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/recording-popup/': {
       id: '/recording-popup/'
       path: '/'
@@ -141,6 +243,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/preferences/'
       preLoaderRoute: typeof PreferencesIndexRouteImport
       parentRoute: typeof PreferencesRouteRoute
+    }
+    '/onboarding/': {
+      id: '/onboarding/'
+      path: '/'
+      fullPath: '/onboarding/'
+      preLoaderRoute: typeof OnboardingIndexRouteImport
+      parentRoute: typeof OnboardingRouteRoute
     }
     '/preferences/updates': {
       id: '/preferences/updates'
@@ -163,8 +272,74 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PreferencesAboutRouteImport
       parentRoute: typeof PreferencesRouteRoute
     }
+    '/onboarding/welcome': {
+      id: '/onboarding/welcome'
+      path: '/welcome'
+      fullPath: '/onboarding/welcome'
+      preLoaderRoute: typeof OnboardingWelcomeRouteImport
+      parentRoute: typeof OnboardingRouteRoute
+    }
+    '/onboarding/fn-space': {
+      id: '/onboarding/fn-space'
+      path: '/fn-space'
+      fullPath: '/onboarding/fn-space'
+      preLoaderRoute: typeof OnboardingFnSpaceRouteImport
+      parentRoute: typeof OnboardingRouteRoute
+    }
+    '/onboarding/fn-hold': {
+      id: '/onboarding/fn-hold'
+      path: '/fn-hold'
+      fullPath: '/onboarding/fn-hold'
+      preLoaderRoute: typeof OnboardingFnHoldRouteImport
+      parentRoute: typeof OnboardingRouteRoute
+    }
+    '/onboarding/complete': {
+      id: '/onboarding/complete'
+      path: '/complete'
+      fullPath: '/onboarding/complete'
+      preLoaderRoute: typeof OnboardingCompleteRouteImport
+      parentRoute: typeof OnboardingRouteRoute
+    }
+    '/onboarding/api-keys': {
+      id: '/onboarding/api-keys'
+      path: '/api-keys'
+      fullPath: '/onboarding/api-keys'
+      preLoaderRoute: typeof OnboardingApiKeysRouteImport
+      parentRoute: typeof OnboardingRouteRoute
+    }
+    '/onboarding/accessibility': {
+      id: '/onboarding/accessibility'
+      path: '/accessibility'
+      fullPath: '/onboarding/accessibility'
+      preLoaderRoute: typeof OnboardingAccessibilityRouteImport
+      parentRoute: typeof OnboardingRouteRoute
+    }
   }
 }
+
+interface OnboardingRouteRouteChildren {
+  OnboardingAccessibilityRoute: typeof OnboardingAccessibilityRoute
+  OnboardingApiKeysRoute: typeof OnboardingApiKeysRoute
+  OnboardingCompleteRoute: typeof OnboardingCompleteRoute
+  OnboardingFnHoldRoute: typeof OnboardingFnHoldRoute
+  OnboardingFnSpaceRoute: typeof OnboardingFnSpaceRoute
+  OnboardingWelcomeRoute: typeof OnboardingWelcomeRoute
+  OnboardingIndexRoute: typeof OnboardingIndexRoute
+}
+
+const OnboardingRouteRouteChildren: OnboardingRouteRouteChildren = {
+  OnboardingAccessibilityRoute: OnboardingAccessibilityRoute,
+  OnboardingApiKeysRoute: OnboardingApiKeysRoute,
+  OnboardingCompleteRoute: OnboardingCompleteRoute,
+  OnboardingFnHoldRoute: OnboardingFnHoldRoute,
+  OnboardingFnSpaceRoute: OnboardingFnSpaceRoute,
+  OnboardingWelcomeRoute: OnboardingWelcomeRoute,
+  OnboardingIndexRoute: OnboardingIndexRoute,
+}
+
+const OnboardingRouteRouteWithChildren = OnboardingRouteRoute._addFileChildren(
+  OnboardingRouteRouteChildren,
+)
 
 interface PreferencesRouteRouteChildren {
   PreferencesAboutRoute: typeof PreferencesAboutRoute
@@ -195,6 +370,7 @@ const RecordingPopupRouteRouteWithChildren =
   RecordingPopupRouteRoute._addFileChildren(RecordingPopupRouteRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
+  OnboardingRouteRoute: OnboardingRouteRouteWithChildren,
   PreferencesRouteRoute: PreferencesRouteRouteWithChildren,
   RecordingPopupRouteRoute: RecordingPopupRouteRouteWithChildren,
 }
