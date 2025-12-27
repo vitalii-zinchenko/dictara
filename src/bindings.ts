@@ -7,6 +7,12 @@
 
 
 export const commands = {
+async checkAccessibilityPermission() : Promise<boolean> {
+    return await TAURI_INVOKE("check_accessibility_permission");
+},
+async requestAccessibilityPermission() : Promise<void> {
+    await TAURI_INVOKE("request_accessibility_permission");
+},
 async loadAppConfig() : Promise<Result<AppConfig, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("load_app_config") };
@@ -146,6 +152,54 @@ async checkForUpdates(showNoUpdateMessage: boolean) : Promise<Result<boolean, st
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async loadOnboardingConfig() : Promise<Result<OnboardingConfig, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("load_onboarding_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async saveOnboardingStep(step: OnboardingStep) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("save_onboarding_step", { step }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async finishOnboarding() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("finish_onboarding") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async skipOnboarding() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("skip_onboarding") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async setPendingRestart(pending: boolean) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("set_pending_restart", { pending }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async restartOnboarding() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("restart_onboarding") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -176,6 +230,26 @@ active_provider: Provider | null }
  * Azure OpenAI provider configuration (stored in keychain)
  */
 export type AzureOpenAIConfig = { api_key: string; endpoint: string }
+/**
+ * Onboarding configuration (stored locally)
+ */
+export type OnboardingConfig = { 
+/**
+ * Whether the user has completed or skipped onboarding
+ */
+finished: boolean; 
+/**
+ * Current step in the onboarding flow
+ */
+current_step: OnboardingStep; 
+/**
+ * Flag to track if we're resuming after an accessibility restart
+ */
+pending_restart: boolean }
+/**
+ * Onboarding step enum - tracks current position in the wizard
+ */
+export type OnboardingStep = "welcome" | "accessibility" | "api_keys" | "fn_hold" | "fn_space" | "complete"
 /**
  * OpenAI provider configuration (stored in keychain)
  */

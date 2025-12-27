@@ -2,7 +2,7 @@
 use crate::updater::{self, UpdaterState};
 use crate::{
     clients::openai::OpenAIClient,
-    config::{self, AzureOpenAIConfig, OpenAIConfig, Provider},
+    config::{self, AzureOpenAIConfig, OnboardingStep, OpenAIConfig, Provider},
     keyboard_listener::KeyListener,
     keychain::{self, ProviderAccount},
     recording::{
@@ -54,6 +54,29 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
     // Load app config and check if properly configured
     let store = app.store("config.json")?;
     let app_config = config::load_app_config(&store);
+    let mut onboarding_config = config::load_onboarding_config(&store);
+
+    // Handle pending restart from accessibility step
+    if onboarding_config.pending_restart {
+        println!("🔄 Resuming onboarding after restart...");
+        onboarding_config.pending_restart = false;
+
+        // Check if accessibility is now granted
+        #[cfg(target_os = "macos")]
+        {
+            let has_accessibility =
+                macos_accessibility_client::accessibility::application_is_trusted();
+            if has_accessibility {
+                println!("✅ Accessibility granted after restart, moving to API Keys step");
+                onboarding_config.current_step = OnboardingStep::ApiKeys;
+            } else {
+                println!("⚠️  Accessibility still not granted, staying on accessibility step");
+            }
+        }
+
+        // Save the updated config
+        config::save_onboarding_config(&store, &onboarding_config)?;
+    }
 
     // Check if any provider is properly configured
     let needs_configuration = match &app_config.active_provider {
@@ -73,9 +96,15 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
     };
 
     if needs_configuration {
-        println!("⚠️  AI provider not configured. Opening Preferences...");
+        println!("⚠️  AI provider not configured.");
     } else {
         println!("✅ AI provider configured successfully");
+    }
+
+    // Determine if we need to show onboarding
+    let show_onboarding = !onboarding_config.finished;
+    if show_onboarding {
+        println!("🚀 Onboarding not finished, will show onboarding window");
     }
 
     // ========================================
@@ -120,8 +149,18 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
     app.manage(audio_level_channel);
     app.manage(last_recording_state.clone());
 
-    // Start keyboard listener with command sender
-    let _listener = KeyListener::start(command_tx, recording_state.clone());
+    // Only start keyboard listener if accessibility permission is granted
+    // This prevents the permission dialog from appearing during onboarding
+    #[cfg(target_os = "macos")]
+    let has_accessibility = macos_accessibility_client::accessibility::application_is_trusted();
+    #[cfg(not(target_os = "macos"))]
+    let has_accessibility = true;
+
+    if has_accessibility {
+        let _listener = KeyListener::start(command_tx, recording_state.clone());
+    } else {
+        println!("⚠️  Skipping keyboard listener - accessibility not granted yet");
+    }
 
     let menu_with_items = build_menu(app)?;
     let paste_menu_item_state = PasteMenuItemState {
@@ -194,8 +233,14 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
         updater::start_periodic_update_check(app.app_handle().clone(), updater_state);
     }
 
-    // Open preferences window if configuration needed
-    if needs_configuration {
+    // Decide which window to open
+    if show_onboarding {
+        // Onboarding not finished - show onboarding window
+        if let Err(e) = window::open_onboarding_window(app.app_handle()) {
+            eprintln!("Failed to open onboarding window: {}", e);
+        }
+    } else if needs_configuration {
+        // Onboarding finished but configuration missing - show preferences
         if let Err(e) = window::open_preferences_window(app.app_handle()) {
             eprintln!("Failed to open preferences window: {}", e);
         }

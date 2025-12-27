@@ -16,8 +16,10 @@ pub enum Provider {
 
 /// App configuration (stored locally)
 #[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]
+#[serde(rename_all = "camelCase")]
 pub struct AppConfig {
     /// Currently active provider (only one can be active)
+    #[serde(alias = "active_provider")]
     pub active_provider: Option<Provider>,
 }
 
@@ -34,10 +36,44 @@ pub struct AzureOpenAIConfig {
     pub endpoint: String,
 }
 
+/// Onboarding step enum - tracks current position in the wizard
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, specta::Type, Default)]
+pub enum OnboardingStep {
+    #[default]
+    #[serde(rename = "welcome")]
+    Welcome,
+    #[serde(rename = "accessibility")]
+    Accessibility,
+    #[serde(rename = "api_keys")]
+    ApiKeys,
+    #[serde(rename = "fn_hold")]
+    FnHold,
+    #[serde(rename = "fn_space")]
+    FnSpace,
+    #[serde(rename = "complete")]
+    Complete,
+}
+
+/// Onboarding configuration (stored locally)
+#[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingConfig {
+    /// Whether the user has completed or skipped onboarding
+    pub finished: bool,
+    /// Current step in the onboarding flow
+    #[serde(alias = "current_step")]
+    pub current_step: OnboardingStep,
+    /// Flag to track if we're resuming after an accessibility restart
+    #[serde(alias = "pending_restart")]
+    pub pending_restart: bool,
+}
+
 /// Load app configuration from store
 pub fn load_app_config(store: &tauri_plugin_store::Store<tauri::Wry>) -> AppConfig {
+    // Try camelCase first, fall back to legacy snake_case
     store
-        .get("app_config")
+        .get("appConfig")
+        .or_else(|| store.get("app_config"))
         .and_then(|v| serde_json::from_value(v).ok())
         .unwrap_or_default()
 }
@@ -48,7 +84,30 @@ pub fn save_app_config(
     config: &AppConfig,
 ) -> Result<(), String> {
     store.set(
-        "app_config",
+        "appConfig",
+        serde_json::to_value(config).map_err(|e| e.to_string())?,
+    );
+    store.save().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Load onboarding configuration from store
+pub fn load_onboarding_config(store: &tauri_plugin_store::Store<tauri::Wry>) -> OnboardingConfig {
+    // Try camelCase first, fall back to legacy snake_case
+    store
+        .get("onboardingConfig")
+        .or_else(|| store.get("onboarding_config"))
+        .and_then(|v| serde_json::from_value(v).ok())
+        .unwrap_or_default()
+}
+
+/// Save onboarding configuration to store
+pub fn save_onboarding_config(
+    store: &tauri_plugin_store::Store<tauri::Wry>,
+    config: &OnboardingConfig,
+) -> Result<(), String> {
+    store.set(
+        "onboardingConfig",
         serde_json::to_value(config).map_err(|e| e.to_string())?,
     );
     store.save().map_err(|e| e.to_string())?;

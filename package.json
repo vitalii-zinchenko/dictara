@@ -16,6 +16,8 @@
     "be:format": "cd src-tauri && cargo fmt",
     "verify": "npm run be:format && npm run be:lint && npm run be:check && npm run be:check-release",
     "release:local": "tauri build && open src-tauri/target/release/bundle/macos/Dictara.app",
+    "get-config": "./scripts/dump-config.sh app.dictara",
+    "get-config:dev": "./scripts/dump-config.sh app.dictara.dev",
     "prepare": "husky"
   },
   "dependencies": {

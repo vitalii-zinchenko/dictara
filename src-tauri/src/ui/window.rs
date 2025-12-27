@@ -270,3 +270,37 @@ pub fn open_preferences_window(app_handle: &tauri::AppHandle) -> Result<(), AnyE
 
     Ok(())
 }
+
+pub fn open_onboarding_window(app_handle: &tauri::AppHandle) -> Result<(), AnyError> {
+    let (width, height) = (800.0, 800.0);
+
+    let window = match app_handle.get_webview_window("onboarding") {
+        Some(w) => w,
+        None => tauri::WebviewWindowBuilder::new(
+            app_handle,
+            "onboarding",
+            tauri::WebviewUrl::App("onboarding".into()),
+        )
+        .title("Welcome to Dictara")
+        .inner_size(width, height)
+        .min_inner_size(width, height)
+        .max_inner_size(width, height) // Fixed size for wizard
+        .resizable(false)
+        .visible(false)
+        .build()?,
+    };
+
+    window.show()?;
+    window.set_focus()?;
+    window.center()?;
+
+    Ok(())
+}
+
+#[allow(dead_code)]
+pub fn close_onboarding_window(app_handle: &tauri::AppHandle) -> Result<(), AnyError> {
+    if let Some(window) = app_handle.get_webview_window("onboarding") {
+        window.close()?;
+    }
+    Ok(())
+}

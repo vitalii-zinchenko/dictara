@@ -15,6 +15,9 @@ fn build_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
     tauri_specta::Builder::<tauri::Wry>::new()
         // Commands with specta support (type-safe bindings will be generated)
         .commands(tauri_specta::collect_commands![
+            // Accessibility
+            tauri_commands::check_accessibility_permission,
+            tauri_commands::request_accessibility_permission,
             // App configuration
             tauri_commands::load_app_config,
             tauri_commands::save_app_config,
@@ -37,6 +40,13 @@ fn build_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             tauri_commands::register_audio_level_channel,
             // Updater
             updater::check_for_updates,
+            // Onboarding
+            tauri_commands::load_onboarding_config,
+            tauri_commands::save_onboarding_step,
+            tauri_commands::finish_onboarding,
+            tauri_commands::skip_onboarding,
+            tauri_commands::set_pending_restart,
+            tauri_commands::restart_onboarding,
         ])
         // Events with specta support (type-safe bindings will be generated)
         .events(tauri_specta::collect_events![
@@ -98,7 +108,14 @@ pub fn run() {
             tauri_commands::dismiss_error,
             tauri_commands::resize_popup_for_error,
             // Updater
-            updater::check_for_updates
+            updater::check_for_updates,
+            // Onboarding
+            tauri_commands::load_onboarding_config,
+            tauri_commands::save_onboarding_step,
+            tauri_commands::finish_onboarding,
+            tauri_commands::skip_onboarding,
+            tauri_commands::set_pending_restart,
+            tauri_commands::restart_onboarding
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

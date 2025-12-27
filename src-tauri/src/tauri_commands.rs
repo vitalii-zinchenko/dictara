@@ -1,12 +1,16 @@
-use crate::config::{self, AppConfig, AzureOpenAIConfig, OpenAIConfig, Provider};
+use crate::config::{
+    self, AppConfig, AzureOpenAIConfig, OnboardingConfig, OnboardingStep, OpenAIConfig, Provider,
+};
 use crate::keychain::{self, ProviderAccount};
 use crate::recording::{LastRecordingState, RecordingCommand};
 use crate::setup::{AudioLevelChannel, RecordingCommandSender};
+use crate::ui::window;
 use tauri::ipc::Channel;
 use tauri::State;
 use tauri_plugin_store::StoreExt;
 
 #[tauri::command]
+#[specta::specta]
 pub fn check_accessibility_permission() -> bool {
     #[cfg(target_os = "macos")]
     {
@@ -19,6 +23,7 @@ pub fn check_accessibility_permission() -> bool {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn request_accessibility_permission() {
     #[cfg(target_os = "macos")]
     {
@@ -265,4 +270,120 @@ pub fn resize_popup_for_error(app: tauri::AppHandle) -> Result<(), String> {
 
     crate::ui::window::resize_recording_popup_for_error(&app)
         .map_err(|e| format!("Failed to resize popup: {}", e))
+}
+
+// ===== ONBOARDING COMMANDS =====
+
+#[tauri::command]
+#[specta::specta]
+pub fn load_onboarding_config(app: tauri::AppHandle) -> Result<OnboardingConfig, String> {
+    println!("[Command] load_onboarding_config called");
+
+    let store = app.store("config.json").map_err(|e| {
+        eprintln!("[Command] Failed to open store: {}", e);
+        format!("Failed to open store: {}", e)
+    })?;
+
+    Ok(config::load_onboarding_config(&store))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn save_onboarding_step(app: tauri::AppHandle, step: OnboardingStep) -> Result<(), String> {
+    println!(
+        "[Command] save_onboarding_step called with step: {:?}",
+        step
+    );
+
+    let store = app.store("config.json").map_err(|e| {
+        eprintln!("[Command] Failed to open store: {}", e);
+        format!("Failed to open store: {}", e)
+    })?;
+
+    let mut onboarding_config = config::load_onboarding_config(&store);
+    onboarding_config.current_step = step;
+    config::save_onboarding_config(&store, &onboarding_config)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn finish_onboarding(app: tauri::AppHandle) -> Result<(), String> {
+    println!("[Command] finish_onboarding called");
+
+    let store = app.store("config.json").map_err(|e| {
+        eprintln!("[Command] Failed to open store: {}", e);
+        format!("Failed to open store: {}", e)
+    })?;
+
+    let mut onboarding_config = config::load_onboarding_config(&store);
+    onboarding_config.finished = true;
+    onboarding_config.current_step = OnboardingStep::Complete;
+    onboarding_config.pending_restart = false;
+    config::save_onboarding_config(&store, &onboarding_config)?;
+
+    // Close the onboarding window
+    window::close_onboarding_window(&app).map_err(|e| {
+        eprintln!("[Command] Failed to close onboarding window: {}", e);
+        format!("Failed to close onboarding window: {}", e)
+    })
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn skip_onboarding(app: tauri::AppHandle) -> Result<(), String> {
+    println!("[Command] skip_onboarding called");
+
+    let store = app.store("config.json").map_err(|e| {
+        eprintln!("[Command] Failed to open store: {}", e);
+        format!("Failed to open store: {}", e)
+    })?;
+
+    let mut onboarding_config = config::load_onboarding_config(&store);
+    onboarding_config.finished = true;
+    config::save_onboarding_config(&store, &onboarding_config)?;
+
+    // Close the onboarding window
+    window::close_onboarding_window(&app).map_err(|e| {
+        eprintln!("[Command] Failed to close onboarding window: {}", e);
+        format!("Failed to close onboarding window: {}", e)
+    })
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn set_pending_restart(app: tauri::AppHandle, pending: bool) -> Result<(), String> {
+    println!(
+        "[Command] set_pending_restart called with pending: {}",
+        pending
+    );
+
+    let store = app.store("config.json").map_err(|e| {
+        eprintln!("[Command] Failed to open store: {}", e);
+        format!("Failed to open store: {}", e)
+    })?;
+
+    let mut onboarding_config = config::load_onboarding_config(&store);
+    onboarding_config.pending_restart = pending;
+    config::save_onboarding_config(&store, &onboarding_config)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn restart_onboarding(app: tauri::AppHandle) -> Result<(), String> {
+    println!("[Command] restart_onboarding called");
+
+    let store = app.store("config.json").map_err(|e| {
+        eprintln!("[Command] Failed to open store: {}", e);
+        format!("Failed to open store: {}", e)
+    })?;
+
+    // Reset onboarding config to initial state
+    let onboarding_config = config::OnboardingConfig::default();
+    config::save_onboarding_config(&store, &onboarding_config)?;
+
+    // Open the onboarding window
+    crate::ui::window::open_onboarding_window(&app).map_err(|e| {
+        eprintln!("[Command] Failed to open onboarding window: {}", e);
+        format!("Failed to open onboarding window: {}", e)
+    })
 }

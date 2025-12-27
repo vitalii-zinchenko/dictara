@@ -1,6 +1,6 @@
+import { commands } from "@/bindings";
 import { Channel } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
-import { commands } from "@/bindings";
 
 interface UseAudioLevelResult {
   audioLevel: number;

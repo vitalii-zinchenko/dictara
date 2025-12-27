@@ -1,10 +1,12 @@
 import { getVersion } from '@tauri-apps/api/app'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { ExternalLink } from 'lucide-react'
+import { ExternalLink, RotateCcw } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { useRestartOnboarding } from '@/hooks/useOnboardingNavigation'
 
 export function About() {
   const [appVersion, setAppVersion] = useState<string | null>(null)
+  const restartOnboarding = useRestartOnboarding()
 
   useEffect(() => {
     getVersion()
@@ -39,7 +41,19 @@ export function About() {
           github.com/vitalii-zinchenko/dictara
         </button>
       </div>
+
+      <div className="space-y-2">
+        <p className="text-sm text-muted-foreground">Setup</p>
+        <button
+          type="button"
+          onClick={() => restartOnboarding.mutate()}
+          disabled={restartOnboarding.isPending}
+          className="flex items-center gap-2 text-sm text-primary hover:underline disabled:opacity-50"
+        >
+          <RotateCcw className="h-4 w-4" />
+          {restartOnboarding.isPending ? 'Restarting...' : 'Restart Onboarding'}
+        </button>
+      </div>
     </div>
   )
 }
-
