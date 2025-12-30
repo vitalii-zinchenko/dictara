@@ -1,3 +1,4 @@
+use log::error;
 use std::sync::mpsc;
 use tauri::{Manager, Monitor};
 
@@ -17,37 +18,25 @@ fn show_window_without_focus(window: &tauri::WebviewWindow) -> Result<(), AnyErr
     use objc2_app_kit::{NSApplicationActivationOptions, NSWorkspace};
     use std::ptr;
 
-    println!("[Window] show_window_without_focus: getting ns_window...");
-
     // Capture the currently frontmost app so we can restore focus after showing our popup.
     let frontmost_app = NSWorkspace::sharedWorkspace().frontmostApplication();
 
     // Get the raw NSWindow pointer from Tauri
     let ns_window_ptr = match window.ns_window() {
-        Ok(ptr) => {
-            println!("[Window] Got ns_window pointer");
-            ptr as *mut AnyObject
-        }
+        Ok(ptr) => ptr as *mut AnyObject,
         Err(e) => {
-            eprintln!(
-                "[Window] Failed to get ns_window: {:?}, falling back to show()",
-                e
-            );
+            error!("Failed to get ns_window: {:?}, falling back to show()", e);
             window.show()?;
             return Ok(());
         }
     };
 
-    println!("[Window] Calling native macOS methods...");
-
     // Safety: ns_window_ptr is a valid NSWindow pointer from Tauri
     unsafe {
         // First, make the window visible (setIsVisible:YES doesn't activate)
         let _: () = msg_send![ns_window_ptr, setIsVisible: true];
-        println!("[Window] setIsVisible done");
         // Then bring to front without making key (orderFront: vs makeKeyAndOrderFront:)
         let _: () = msg_send![ns_window_ptr, orderFront: ptr::null::<AnyObject>()];
-        println!("[Window] orderFront done");
     }
 
     // Give focus back to whoever had it before we showed the popup.
@@ -68,24 +57,6 @@ fn show_window_without_focus(window: &tauri::WebviewWindow) -> Result<(), AnyErr
 }
 
 /// Find the monitor containing the cursor position.
-///
-/// All monitors share a virtual desktop coordinate space. Each monitor has:
-/// - **Position**: where it sits in the virtual space (e.g., secondary monitor at x=1920)
-/// - **Size**: its own dimensions
-///
-/// ```text
-///   (0,0)                    (1920,0)
-///     +----------------------+----------------------+
-///     |                      |                      |
-///     |     Primary          |     Secondary        |
-///     |     Monitor          |     Monitor          |
-///     |     1920x1080        |     1920x1080        |
-///     |                      |                      |
-///     +----------------------+----------------------+
-///                        (1920,1080)            (3840,1080)
-/// ```
-///
-/// This function checks which monitor's rectangle contains the cursor coordinates.
 fn get_monitor_at_cursor(app_handle: &tauri::AppHandle) -> Option<Monitor> {
     let cursor_pos = app_handle.cursor_position().ok()?;
 
@@ -147,7 +118,7 @@ fn open_recording_popup_inner(app_handle: &tauri::AppHandle) -> Result<(), AnyEr
             width: POPUP_WIDTH_NORMAL as f64,
             height: POPUP_HEIGHT as f64,
         })) {
-            eprintln!("[Window] Failed to set window size: {}", e);
+            error!("Failed to set window size: {}", e);
         }
 
         // Get monitor at cursor, fallback to primary monitor
@@ -174,14 +145,14 @@ fn open_recording_popup_inner(app_handle: &tauri::AppHandle) -> Result<(), AnyEr
             if let Err(e) =
                 window.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }))
             {
-                eprintln!("[Window] Failed to set window position: {}", e);
+                error!("Failed to set window position: {}", e);
             }
         } else {
-            eprintln!("[Window] Failed to get monitor at cursor or primary monitor");
+            error!("Failed to get monitor at cursor or primary monitor");
         }
 
         if let Err(e) = show_window_without_focus(&window) {
-            eprintln!("[Window] Failed to show recording popup: {}", e);
+            error!("Failed to show recording popup: {}", e);
             return Err(e);
         }
     } else {
@@ -194,7 +165,7 @@ fn open_recording_popup_inner(app_handle: &tauri::AppHandle) -> Result<(), AnyEr
 fn close_recording_popup_inner(app_handle: &tauri::AppHandle) -> Result<(), AnyError> {
     if let Some(window) = app_handle.get_webview_window("recording-popup") {
         if let Err(e) = window.hide() {
-            eprintln!("[Window] Failed to hide recording popup: {}", e);
+            error!("Failed to hide recording popup: {}", e);
             return Err(Box::new(e));
         }
     } else {

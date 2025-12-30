@@ -1,6 +1,6 @@
 [package]
 name = "dictara"
-version = "0.1.13-dev.2"
+version = "0.1.14"
 description = "Dictara - Speach to text app"
 authors = ["Dictara Contributors"]
 license = "MIT"
@@ -25,6 +25,8 @@ tauri-plugin-opener = "2"
 tauri-plugin-process = "2"
 tauri-plugin-store = "2"
 tauri-plugin-updater = "2"
+tauri-plugin-log = "2"
+log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rdev = { git = "https://github.com/fufesou/rdev" }
@@ -42,6 +44,8 @@ keyring = { version = "3", features = ["apple-native"] }
 specta = { version = "=2.0.0-rc.22", features = ["derive"] }
 tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"] }
 specta-typescript = "0.0.9"
+thiserror = "2.0.17"
+strum = { version = "0.27.2", features = ["derive"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2-core-graphics = "0.3.1"  # For direct CGEvent posting

@@ -1,3 +1,4 @@
+import { error as logError } from '@tauri-apps/plugin-log'
 import { useAppConfig } from '@/hooks/useAppConfig'
 import { useSaveAppConfig } from '@/hooks/useSaveAppConfig'
 import { useEffect, useRef, useState } from 'react'
@@ -7,7 +8,7 @@ import type { Provider } from './types'
 
 export function ApiKeys() {
   // Load app config using TanStack Query (type-safe via tauri-specta)
-  const { data: config, isLoading, error } = useAppConfig()
+  const { data: config, isLoading } = useAppConfig()
   const saveConfig = useSaveAppConfig()
 
   // Local state - initialized from config on first load
@@ -18,16 +19,11 @@ export function ApiKeys() {
   // Sync state from config on initial load only
   useEffect(() => {
     if (config && !isInitialized.current) {
-      setActiveProvider(config.active_provider)
-      setExpandedSection(config.active_provider)
+      setActiveProvider(config.activeProvider)
+      setExpandedSection(config.activeProvider)
       isInitialized.current = true
-      console.log('[ApiKeys] Loaded config:', config)
     }
   }, [config])
-
-  if (error) {
-    console.error('[ApiKeys] Failed to load config:', error)
-  }
 
   // Toggle section expand/collapse (visual only)
   const handleToggleExpand = (provider: Provider) => {
@@ -36,8 +32,6 @@ export function ApiKeys() {
 
   // Toggle provider activation (functional)
   const handleToggleProvider = (provider: Provider) => {
-    console.log('[ApiKeys] Toggling provider:', provider)
-
     // If clicking the already-active provider, disable it
     const newProvider = activeProvider === provider ? null : provider
     const previousProvider = activeProvider
@@ -48,13 +42,10 @@ export function ApiKeys() {
     saveConfig.mutate(
       { activeProvider: newProvider },
       {
-        onSuccess: () => {
-          console.log('[ApiKeys] Active provider updated:', newProvider)
-        },
         onError: (e) => {
           // Revert on error
           setActiveProvider(previousProvider)
-          console.error('[ApiKeys] Failed to update active provider:', e)
+          logError(`[ApiKeys] Failed to update active provider: ${e}`)
         },
       }
     )

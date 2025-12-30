@@ -1,4 +1,7 @@
+import { waitForPaint } from '@/utils/waitForPaint'
+import { error as logError } from '@tauri-apps/plugin-log'
 import { useForm } from '@tanstack/react-form'
+import { Loader2 } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
@@ -41,8 +44,9 @@ export function AzureOpenAIProvider({
     },
     validators: {
       onSubmitAsync: async ({ value }) => {
-        // Validate the entire configuration by testing it
-        console.log('[AzureOpenAIProvider] Validating configuration...')
+        // Workaround for TanStack Form not yielding to browser paint cycle
+        // See: https://github.com/TanStack/form/issues/1967
+        await waitForPaint()
 
         try {
           const isValid = await testConfig.mutateAsync({
@@ -58,8 +62,7 @@ export function AzureOpenAIProvider({
           }
 
           return undefined
-        } catch (e) {
-          console.error('[AzureOpenAIProvider] Validation failed:', e)
+        } catch {
           return {
             form: 'Failed to validate configuration. Please try again.',
             fields: {},
@@ -68,7 +71,6 @@ export function AzureOpenAIProvider({
       },
     },
     onSubmit: async ({ value }) => {
-      console.log('[AzureOpenAIProvider] Saving config...')
       setSaveSuccess(false)
 
       try {
@@ -76,30 +78,26 @@ export function AzureOpenAIProvider({
           apiKey: value.apiKey,
           endpoint: value.endpoint,
         })
-        console.log('[AzureOpenAIProvider] Config saved successfully')
         setSaveSuccess(true)
         form.reset()
       } catch (e) {
-        console.error('[AzureOpenAIProvider] Failed to save config:', e)
+        logError(`[AzureOpenAIProvider] Failed to save config: ${e}`)
       }
     },
   })
 
   const handleDelete = async () => {
-    console.log('[AzureOpenAIProvider] Deleting config...')
     try {
       await deleteConfig.mutateAsync()
-      console.log('[AzureOpenAIProvider] Config deleted successfully')
       setSaveSuccess(false)
       form.reset()
     } catch (e) {
-      console.error('[AzureOpenAIProvider] Failed to delete config:', e)
+      logError(`[AzureOpenAIProvider] Failed to delete config: ${e}`)
     }
   }
 
   // Derive error message from mutations
-  const errorMessage =
-    saveConfig.error?.message || deleteConfig.error?.message
+  const errorMessage = saveConfig.error?.message || deleteConfig.error?.message
 
   if (isLoading) {
     return (
@@ -145,8 +143,7 @@ export function AzureOpenAIProvider({
             validators={{
               onChange: ({ value }) => {
                 if (!value) return 'Endpoint is required'
-                if (!value.startsWith('https://'))
-                  return 'Endpoint must start with https://'
+                if (!value.startsWith('https://')) return 'Endpoint must start with https://'
                 return undefined
               },
             }}
@@ -156,10 +153,7 @@ export function AzureOpenAIProvider({
                 <Input
                   id="azure-endpoint"
                   type="url"
-                  placeholder={
-                    existingConfig?.endpoint ||
-                    'https://your-resource.openai.azure.com'
-                  }
+                  placeholder={existingConfig?.endpoint || 'https://your-resource.openai.azure.com'}
                   value={field.state.value}
                   onChange={(e) => {
                     field.handleChange(e.target.value)
@@ -168,9 +162,7 @@ export function AzureOpenAIProvider({
                   onBlur={field.handleBlur}
                 />
                 {field.state.meta.isTouched && field.state.meta.errors.length > 0 && (
-                  <p className="text-sm text-destructive">
-                    {field.state.meta.errors.join(', ')}
-                  </p>
+                  <p className="text-sm text-destructive">{field.state.meta.errors.join(', ')}</p>
                 )}
               </div>
             )}
@@ -218,9 +210,7 @@ export function AzureOpenAIProvider({
                   )}
                 </div>
                 {field.state.meta.isTouched && field.state.meta.errors.length > 0 && (
-                  <p className="text-sm text-destructive">
-                    {field.state.meta.errors.join(', ')}
-                  </p>
+                  <p className="text-sm text-destructive">{field.state.meta.errors.join(', ')}</p>
                 )}
               </div>
             )}
@@ -231,34 +221,30 @@ export function AzureOpenAIProvider({
         <form.Subscribe selector={(state) => state.errorMap}>
           {(errorMap) => (
             <>
-              {errorMap.onSubmit && (
-                <p className="text-sm text-destructive">{errorMap.onSubmit}</p>
-              )}
+              {errorMap.onSubmit && <p className="text-sm text-destructive">{errorMap.onSubmit}</p>}
             </>
           )}
         </form.Subscribe>
         {errorMessage && <p className="text-sm text-destructive">{errorMessage}</p>}
-        {saveSuccess && (
-          <p className="text-sm text-green-600">Configuration saved successfully!</p>
-        )}
+        {saveSuccess && <p className="text-sm text-green-600">Configuration saved successfully!</p>}
 
         {/* Action buttons */}
         <div className="flex gap-2">
           <form.Subscribe
-            selector={(formState) => ({
-              canSubmit: formState.canSubmit,
-              isSubmitting: formState.isSubmitting,
-            })}
-          >
-            {({ canSubmit, isSubmitting }) => (
-              <Button
-                type="submit"
-                disabled={!canSubmit || isSubmitting}
-              >
-                {isSubmitting || saveConfig.isPending ? 'Saving...' : 'Save'}
+            selector={(state) => [state.canSubmit, state.isSubmitting]}
+            children={([canSubmit, isSubmitting]) => (
+              <Button type="submit" disabled={!canSubmit}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  'Save'
+                )}
               </Button>
             )}
-          </form.Subscribe>
+          />
         </div>
       </form>
     </ProviderSection>

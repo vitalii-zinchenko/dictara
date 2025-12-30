@@ -1,3 +1,4 @@
+use crate::clients::{ApiConfig, Transcriber};
 use crate::config::{
     self, AppConfig, AzureOpenAIConfig, OnboardingConfig, OnboardingStep, OpenAIConfig, Provider,
 };
@@ -5,6 +6,7 @@ use crate::keychain::{self, ProviderAccount};
 use crate::recording::{LastRecordingState, RecordingCommand};
 use crate::setup::{AudioLevelChannel, RecordingCommandSender};
 use crate::ui::window;
+use log::error;
 use tauri::ipc::Channel;
 use tauri::State;
 use tauri_plugin_store::StoreExt;
@@ -64,10 +66,8 @@ pub fn cancel_recording(sender: State<RecordingCommandSender>) -> Result<(), Str
 #[tauri::command]
 #[specta::specta]
 pub fn load_app_config(app: tauri::AppHandle) -> Result<AppConfig, String> {
-    println!("[Command] load_app_config called");
-
     let store = app.store("config.json").map_err(|e| {
-        eprintln!("[Command] Failed to open store: {}", e);
+        error!("Failed to open store: {}", e);
         format!("Failed to open store: {}", e)
     })?;
 
@@ -80,13 +80,11 @@ pub fn save_app_config(
     app: tauri::AppHandle,
     active_provider: Option<String>,
 ) -> Result<(), String> {
-    println!("[Command] save_app_config called");
-
     let provider = active_provider.map(|p| match p.as_str() {
         "open_ai" | "openai" => Provider::OpenAI,
         "azure_open_ai" | "azure_openai" | "azure" => Provider::AzureOpenAI,
         _ => {
-            eprintln!("[Command] Invalid provider: {}", p);
+            error!("Invalid provider: {}", p);
             panic!("Invalid provider")
         }
     });
@@ -96,7 +94,7 @@ pub fn save_app_config(
     };
 
     let store = app.store("config.json").map_err(|e| {
-        eprintln!("[Command] Failed to open store: {}", e);
+        error!("Failed to open store: {}", e);
         format!("Failed to open store: {}", e)
     })?;
 
@@ -108,53 +106,48 @@ pub fn save_app_config(
 #[tauri::command]
 #[specta::specta]
 pub fn load_openai_config() -> Result<Option<OpenAIConfig>, String> {
-    println!("[Command] load_openai_config called");
     keychain::load_provider_config::<OpenAIConfig>(ProviderAccount::OpenAI).map_err(|e| {
-        let error = format!("Failed to load OpenAI config: {}", e);
-        eprintln!("[Command] {}", error);
-        error
+        let err = format!("Failed to load OpenAI config: {}", e);
+        error!("{}", err);
+        err
     })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn save_openai_config(api_key: String) -> Result<(), String> {
-    println!(
-        "[Command] save_openai_config called with key length: {}",
-        api_key.len()
-    );
-
     let config = OpenAIConfig { api_key };
 
     keychain::save_provider_config(ProviderAccount::OpenAI, &config).map_err(|e| {
-        let error = format!("Failed to save OpenAI config: {}", e);
-        eprintln!("[Command] {}", error);
-        error
+        let err = format!("Failed to save OpenAI config: {}", e);
+        error!("{}", err);
+        err
     })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn delete_openai_config() -> Result<(), String> {
-    println!("[Command] delete_openai_config called");
     keychain::delete_provider_config(ProviderAccount::OpenAI).map_err(|e| {
-        let error = format!("Failed to delete OpenAI config: {}", e);
-        eprintln!("[Command] {}", error);
-        error
+        let err = format!("Failed to delete OpenAI config: {}", e);
+        error!("{}", err);
+        err
     })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn test_openai_config(api_key: String) -> Result<bool, String> {
-    println!("[Command] test_openai_config called");
+    let config = ApiConfig {
+        provider: Provider::OpenAI,
+        api_key,
+        endpoint: String::new(),
+    };
 
-    use crate::clients::openai::OpenAIClient;
-
-    OpenAIClient::test_api_key(Provider::OpenAI, &api_key, None).map_err(|e| {
-        let error = format!("Failed to test OpenAI config: {}", e);
-        eprintln!("[Command] {}", error);
-        error
+    Transcriber::test_api_key(&config).map_err(|e| {
+        let err = format!("Failed to test OpenAI config: {}", e);
+        error!("{}", err);
+        err
     })
 }
 
@@ -163,54 +156,48 @@ pub fn test_openai_config(api_key: String) -> Result<bool, String> {
 #[tauri::command]
 #[specta::specta]
 pub fn load_azure_openai_config() -> Result<Option<AzureOpenAIConfig>, String> {
-    println!("[Command] load_azure_openai_config called");
     keychain::load_provider_config::<AzureOpenAIConfig>(ProviderAccount::AzureOpenAI).map_err(|e| {
-        let error = format!("Failed to load Azure OpenAI config: {}", e);
-        eprintln!("[Command] {}", error);
-        error
+        let err = format!("Failed to load Azure OpenAI config: {}", e);
+        error!("{}", err);
+        err
     })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn save_azure_openai_config(api_key: String, endpoint: String) -> Result<(), String> {
-    println!(
-        "[Command] save_azure_openai_config called with key length: {}, endpoint: {}",
-        api_key.len(),
-        endpoint
-    );
-
     let config = AzureOpenAIConfig { api_key, endpoint };
 
     keychain::save_provider_config(ProviderAccount::AzureOpenAI, &config).map_err(|e| {
-        let error = format!("Failed to save Azure OpenAI config: {}", e);
-        eprintln!("[Command] {}", error);
-        error
+        let err = format!("Failed to save Azure OpenAI config: {}", e);
+        error!("{}", err);
+        err
     })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn delete_azure_openai_config() -> Result<(), String> {
-    println!("[Command] delete_azure_openai_config called");
     keychain::delete_provider_config(ProviderAccount::AzureOpenAI).map_err(|e| {
-        let error = format!("Failed to delete Azure OpenAI config: {}", e);
-        eprintln!("[Command] {}", error);
-        error
+        let err = format!("Failed to delete Azure OpenAI config: {}", e);
+        error!("{}", err);
+        err
     })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn test_azure_openai_config(api_key: String, endpoint: String) -> Result<bool, String> {
-    println!("[Command] test_azure_openai_config called");
+    let config = ApiConfig {
+        provider: Provider::AzureOpenAI,
+        api_key,
+        endpoint,
+    };
 
-    use crate::clients::openai::OpenAIClient;
-
-    OpenAIClient::test_api_key(Provider::AzureOpenAI, &api_key, Some(&endpoint)).map_err(|e| {
-        let error = format!("Failed to test Azure OpenAI config: {}", e);
-        eprintln!("[Command] {}", error);
-        error
+    Transcriber::test_api_key(&config).map_err(|e| {
+        let err = format!("Failed to test Azure OpenAI config: {}", e);
+        error!("{}", err);
+        err
     })
 }
 
@@ -232,8 +219,6 @@ pub fn register_audio_level_channel(
 #[tauri::command]
 #[specta::specta]
 pub fn retry_transcription(sender: State<RecordingCommandSender>) -> Result<(), String> {
-    println!("[Command] retry_transcription called");
-
     sender
         .sender
         .blocking_send(RecordingCommand::RetryTranscription)
@@ -248,8 +233,6 @@ pub fn dismiss_error(
     app: tauri::AppHandle,
     last_recording_state: State<LastRecordingState>,
 ) -> Result<(), String> {
-    println!("[Command] dismiss_error called");
-
     // Delete audio file if exists
     if let Ok(mut last_recording) = last_recording_state.lock() {
         if let Some(path) = last_recording.audio_file_path.take() {
@@ -266,8 +249,6 @@ pub fn dismiss_error(
 #[tauri::command]
 #[specta::specta]
 pub fn resize_popup_for_error(app: tauri::AppHandle) -> Result<(), String> {
-    println!("[Command] resize_popup_for_error called");
-
     crate::ui::window::resize_recording_popup_for_error(&app)
         .map_err(|e| format!("Failed to resize popup: {}", e))
 }
@@ -277,10 +258,8 @@ pub fn resize_popup_for_error(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 #[specta::specta]
 pub fn load_onboarding_config(app: tauri::AppHandle) -> Result<OnboardingConfig, String> {
-    println!("[Command] load_onboarding_config called");
-
     let store = app.store("config.json").map_err(|e| {
-        eprintln!("[Command] Failed to open store: {}", e);
+        error!("Failed to open store: {}", e);
         format!("Failed to open store: {}", e)
     })?;
 
@@ -290,13 +269,8 @@ pub fn load_onboarding_config(app: tauri::AppHandle) -> Result<OnboardingConfig,
 #[tauri::command]
 #[specta::specta]
 pub fn save_onboarding_step(app: tauri::AppHandle, step: OnboardingStep) -> Result<(), String> {
-    println!(
-        "[Command] save_onboarding_step called with step: {:?}",
-        step
-    );
-
     let store = app.store("config.json").map_err(|e| {
-        eprintln!("[Command] Failed to open store: {}", e);
+        error!("Failed to open store: {}", e);
         format!("Failed to open store: {}", e)
     })?;
 
@@ -308,10 +282,8 @@ pub fn save_onboarding_step(app: tauri::AppHandle, step: OnboardingStep) -> Resu
 #[tauri::command]
 #[specta::specta]
 pub fn finish_onboarding(app: tauri::AppHandle) -> Result<(), String> {
-    println!("[Command] finish_onboarding called");
-
     let store = app.store("config.json").map_err(|e| {
-        eprintln!("[Command] Failed to open store: {}", e);
+        error!("Failed to open store: {}", e);
         format!("Failed to open store: {}", e)
     })?;
 
@@ -323,7 +295,7 @@ pub fn finish_onboarding(app: tauri::AppHandle) -> Result<(), String> {
 
     // Close the onboarding window
     window::close_onboarding_window(&app).map_err(|e| {
-        eprintln!("[Command] Failed to close onboarding window: {}", e);
+        error!("Failed to close onboarding window: {}", e);
         format!("Failed to close onboarding window: {}", e)
     })
 }
@@ -331,10 +303,8 @@ pub fn finish_onboarding(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 #[specta::specta]
 pub fn skip_onboarding(app: tauri::AppHandle) -> Result<(), String> {
-    println!("[Command] skip_onboarding called");
-
     let store = app.store("config.json").map_err(|e| {
-        eprintln!("[Command] Failed to open store: {}", e);
+        error!("Failed to open store: {}", e);
         format!("Failed to open store: {}", e)
     })?;
 
@@ -344,7 +314,7 @@ pub fn skip_onboarding(app: tauri::AppHandle) -> Result<(), String> {
 
     // Close the onboarding window
     window::close_onboarding_window(&app).map_err(|e| {
-        eprintln!("[Command] Failed to close onboarding window: {}", e);
+        error!("Failed to close onboarding window: {}", e);
         format!("Failed to close onboarding window: {}", e)
     })
 }
@@ -352,13 +322,8 @@ pub fn skip_onboarding(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 #[specta::specta]
 pub fn set_pending_restart(app: tauri::AppHandle, pending: bool) -> Result<(), String> {
-    println!(
-        "[Command] set_pending_restart called with pending: {}",
-        pending
-    );
-
     let store = app.store("config.json").map_err(|e| {
-        eprintln!("[Command] Failed to open store: {}", e);
+        error!("Failed to open store: {}", e);
         format!("Failed to open store: {}", e)
     })?;
 
@@ -370,10 +335,8 @@ pub fn set_pending_restart(app: tauri::AppHandle, pending: bool) -> Result<(), S
 #[tauri::command]
 #[specta::specta]
 pub fn restart_onboarding(app: tauri::AppHandle) -> Result<(), String> {
-    println!("[Command] restart_onboarding called");
-
     let store = app.store("config.json").map_err(|e| {
-        eprintln!("[Command] Failed to open store: {}", e);
+        error!("Failed to open store: {}", e);
         format!("Failed to open store: {}", e)
     })?;
 
@@ -383,7 +346,7 @@ pub fn restart_onboarding(app: tauri::AppHandle) -> Result<(), String> {
 
     // Open the onboarding window
     crate::ui::window::open_onboarding_window(&app).map_err(|e| {
-        eprintln!("[Command] Failed to open onboarding window: {}", e);
+        error!("Failed to open onboarding window: {}", e);
         format!("Failed to open onboarding window: {}", e)
     })
 }

@@ -1,9 +1,10 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample};
 use hound::{WavSpec, WavWriter};
+use log::{error, info};
 use rubato::{FftFixedInOut, Resampler};
 use std::fs::{self, File};
-use std::io::BufWriter;
+use std::io::{self, BufWriter};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
@@ -30,8 +31,6 @@ impl Recording {
     pub fn stop(self) -> Result<RecordingResult, RecorderError> {
         use cpal::traits::StreamTrait;
 
-        println!("[Recording] Stopping recording...");
-
         // Pause and drop the stream
         self.stream.pause().ok();
         drop(self.stream);
@@ -43,11 +42,8 @@ impl Recording {
         // Finalize WAV file
         if let Ok(writer_mutex) = Arc::try_unwrap(self.writer) {
             if let Ok(writer) = writer_mutex.into_inner() {
-                let result = writer.finalize();
-                if let Err(e) = result {
-                    eprintln!("[Recording] Error finalizing WAV: {}", e);
-                } else {
-                    println!("[Recording] WAV file finalized successfully");
+                if let Err(e) = writer.finalize() {
+                    error!("Error finalizing WAV: {}", e);
                 }
             }
         }
@@ -57,22 +53,6 @@ impl Recording {
             .duration_since(self.start_timestamp)
             .unwrap()
             .as_millis() as u64;
-        let duration_sec = duration_ms as f64 / 1000.0;
-
-        // Get file size
-        if let Ok(metadata) = fs::metadata(&file_path) {
-            let file_size = metadata.len();
-            let size_mb = file_size as f64 / (1024.0 * 1024.0);
-            println!(
-                "[Recording] File size: {} bytes ({:.2} MB)",
-                file_size, size_mb
-            );
-        }
-
-        println!(
-            "[Recording] Recording stopped successfully. Duration: {}ms ({:.2}s)",
-            duration_ms, duration_sec
-        );
 
         Ok(RecordingResult {
             file_path: file_path.to_string_lossy().to_string(),
@@ -85,48 +65,46 @@ pub struct AudioRecorder {
     app_handle: tauri::AppHandle,
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum RecorderError {
+    #[error("No input device")]
     NoInputDevice,
+
+    #[error("Device error")]
     DeviceError,
-    IoError,
+
+    #[error("Failed to build stream: {0}")]
+    BuildStreamError(#[from] cpal::BuildStreamError),
+
+    #[error("Failed to play stream: {0}")]
+    PlayStreamError(#[from] cpal::PlayStreamError),
+
+    #[error("Failed to pause stream: {0}")]
+    PauseStreamError(#[from] cpal::PauseStreamError),
+
+    #[error("IO error: {0}")]
+    IoError(#[from] io::Error),
+
+    #[error("Audio encoding error: {0}")]
+    EncodingError(#[from] hound::Error),
 }
 
-impl From<std::io::Error> for RecorderError {
-    fn from(_err: std::io::Error) -> Self {
-        RecorderError::IoError
-    }
-}
-
-impl From<cpal::BuildStreamError> for RecorderError {
-    fn from(_err: cpal::BuildStreamError) -> Self {
-        RecorderError::DeviceError
-    }
-}
-
-impl From<cpal::PlayStreamError> for RecorderError {
-    fn from(_err: cpal::PlayStreamError) -> Self {
-        RecorderError::DeviceError
-    }
-}
-
-impl From<cpal::PauseStreamError> for RecorderError {
-    fn from(_err: cpal::PauseStreamError) -> Self {
-        RecorderError::DeviceError
-    }
-}
-
+// TODO: this should be moved to the controller layer
 impl RecorderError {
     /// Returns a user-friendly error message suitable for display in the UI
     pub fn user_message(&self) -> String {
         match self {
-            RecorderError::NoInputDevice => {
+            RecorderError::NoInputDevice | RecorderError::DeviceError => {
                 "No microphone found. Please connect one and try again.".to_string()
             }
-            RecorderError::DeviceError => {
+            RecorderError::BuildStreamError(_)
+            | RecorderError::PlayStreamError(_)
+            | RecorderError::PauseStreamError(_) => {
                 "Microphone error. Check your audio settings.".to_string()
             }
-            RecorderError::IoError => "Failed to save recording. Check disk space.".to_string(),
+            RecorderError::IoError(_) | RecorderError::EncodingError(_) => {
+                "Failed to save recording. Check disk space.".to_string()
+            }
         }
     }
 }
@@ -139,8 +117,6 @@ impl AudioRecorder {
 
     /// Start a new recording session
     pub fn start(&self, level_channel: Option<Channel<f32>>) -> Result<Recording, RecorderError> {
-        println!("[AudioRecorder] Starting recording...");
-
         // Ensure audio directory exists
         let audio_dir = ensure_audio_dir_exists(&self.app_handle)?;
 
@@ -150,27 +126,14 @@ impl AudioRecorder {
             .default_input_device()
             .ok_or(RecorderError::NoInputDevice)?;
 
-        println!(
-            "[Audio Recorder] Using input device: {}",
-            device.name().unwrap_or_else(|_| "Unknown".to_string())
-        );
-
         // Get default device config - we'll always resample to 16kHz
         let config = device
             .default_input_config()
             .map_err(|_| RecorderError::DeviceError)?;
 
-        println!(
-            "[Audio Recorder] Device config: {} channels, {} Hz, {:?}",
-            config.channels(),
-            config.sample_rate().0,
-            config.sample_format()
-        );
-
         // Generate filename
         let filename = generate_filename();
         let file_path = audio_dir.join(&filename);
-        println!("[Audio Recorder] Recording to: {:?}", file_path);
 
         // Always write 16kHz mono to file (optimal for speech transcription)
         let spec = WavSpec {
@@ -182,18 +145,7 @@ impl AudioRecorder {
 
         let needs_channel_conversion = config.channels() != 1;
 
-        println!(
-            "[Audio Recorder] Output: {} Hz mono → resampling from {} Hz {}",
-            spec.sample_rate,
-            config.sample_rate().0,
-            if needs_channel_conversion {
-                "stereo"
-            } else {
-                "mono"
-            }
-        );
-
-        let writer = WavWriter::create(file_path, spec).map_err(|_| RecorderError::IoError)?;
+        let writer = AudioRecorder::create_wav_writer(file_path, spec)?;
         let writer = Arc::new(Mutex::new(writer));
 
         // Always create resampler (device sample rate → 16kHz)
@@ -201,26 +153,19 @@ impl AudioRecorder {
         let output_rate = 16000;
         let channels = config.channels() as usize;
 
-        let (resampler, required_chunk_size) = match FftFixedInOut::<f32>::new(
-            input_rate,
-            output_rate,
-            1024,
-            channels,
-        ) {
-            Ok(r) => {
-                // Query the actual input chunk size the resampler needs
-                let input_frames = r.input_frames_next();
-                println!("[Audio Recorder] Created FFT resampler: {}Hz {}ch → 16kHz mono (needs {} input samples per chunk)", input_rate, channels, input_frames);
-                (Arc::new(Mutex::new(r)), input_frames)
-            }
-            Err(e) => {
-                eprintln!("[Audio Recorder] Failed to create resampler: {:?}", e);
-                return Err(RecorderError::DeviceError);
-            }
-        };
+        let (resampler, required_chunk_size) =
+            match FftFixedInOut::<f32>::new(input_rate, output_rate, 1024, channels) {
+                Ok(r) => {
+                    let input_frames = r.input_frames_next();
+                    (Arc::new(Mutex::new(r)), input_frames)
+                }
+                Err(e) => {
+                    error!("Failed to create resampler: {:?}", e);
+                    return Err(RecorderError::DeviceError);
+                }
+            };
 
         // Create sample buffer for accumulating samples before resampling
-        // FftFixedInOut requires an exact number of samples (queried above)
         let sample_buffer: Arc<Mutex<Vec<Vec<f32>>>> =
             Arc::new(Mutex::new(vec![Vec::new(); channels]));
 
@@ -274,7 +219,6 @@ impl AudioRecorder {
 
         // Start the stream
         stream.play()?;
-        println!("[AudioRecorder] Stream started successfully");
 
         // Record start timestamp
         let start_timestamp = SystemTime::now();
@@ -288,19 +232,29 @@ impl AudioRecorder {
             app_handle: self.app_handle.clone(),
         })
     }
+
+    fn create_wav_writer(
+        file_path: PathBuf,
+        spec: WavSpec,
+    ) -> Result<WavWriter<io::BufWriter<fs::File>>, RecorderError> {
+        let file = fs::File::create(file_path)?;
+        let buf_writer = io::BufWriter::new(file);
+        Ok(WavWriter::new(buf_writer, spec)?)
+    }
 }
 
 fn ensure_audio_dir_exists(app_handle: &tauri::AppHandle) -> Result<PathBuf, RecorderError> {
-    let cache_dir = app_handle
-        .path()
-        .app_cache_dir()
-        .map_err(|_| RecorderError::IoError)?;
+    let cache_dir = app_handle.path().app_cache_dir().map_err(|_| {
+        RecorderError::IoError(io::Error::new(
+            io::ErrorKind::NotFound,
+            "Cache directory not found",
+        ))
+    })?;
 
     let audio_dir = cache_dir.join("recordings");
 
     if !audio_dir.exists() {
         fs::create_dir_all(&audio_dir)?;
-        println!("[Audio Recorder] Created audio directory: {:?}", audio_dir);
     }
     Ok(audio_dir)
 }
@@ -308,14 +262,8 @@ fn ensure_audio_dir_exists(app_handle: &tauri::AppHandle) -> Result<PathBuf, Rec
 /// Clean up a recording file
 /// Logs errors but doesn't fail - cleanup is best-effort
 pub fn cleanup_recording_file(file_path: &str) {
-    match fs::remove_file(file_path) {
-        Ok(_) => println!("[Audio Recorder] Cleaned up recording file: {}", file_path),
-        Err(e) => {
-            eprintln!(
-                "[Audio Recorder] Failed to cleanup recording file {}: {}",
-                file_path, e
-            );
-        }
+    if let Err(e) = fs::remove_file(file_path) {
+        error!("Failed to cleanup recording file {}: {}", file_path, e);
     }
 }
 
@@ -348,7 +296,7 @@ pub fn cleanup_old_recordings(app_handle: &tauri::AppHandle) {
     }
 
     if cleaned > 0 {
-        println!("[Audio Recorder] Cleaned up {} old recording(s)", cleaned);
+        info!("Cleaned up {} old recording(s)", cleaned);
     }
 }
 
@@ -377,7 +325,7 @@ where
     f32: FromSample<T>,
 {
     let err_fn = |err| {
-        eprintln!("[Audio Recorder] Stream error: {}", err);
+        error!("Stream error: {}", err);
     };
 
     let stream = device.build_input_stream(
@@ -434,10 +382,7 @@ fn write_input_data<T>(
 
     let mut buffer_guard = match sample_buffer.lock() {
         Ok(guard) => guard,
-        Err(_) => {
-            eprintln!("[Audio Recorder] Failed to lock sample buffer");
-            return;
-        }
+        Err(_) => return,
     };
 
     // Append incoming samples to buffer
@@ -462,20 +407,14 @@ fn write_input_data<T>(
         let resampled = {
             let mut resampler_guard = match resampler.lock() {
                 Ok(guard) => guard,
-                Err(_) => {
-                    eprintln!("[Audio Recorder] Failed to lock resampler");
-                    return;
-                }
+                Err(_) => return,
             };
 
             let channel_refs: Vec<&[f32]> = channel_chunks.iter().map(|v| v.as_slice()).collect();
 
             match resampler_guard.process(&channel_refs, None) {
                 Ok(resampled) => resampled,
-                Err(e) => {
-                    eprintln!("[Audio Recorder] Resampling error: {:?}", e);
-                    return;
-                }
+                Err(_) => return,
             }
         };
 
@@ -504,10 +443,7 @@ fn write_input_data<T>(
         // Re-acquire buffer lock for next iteration
         buffer_guard = match sample_buffer.lock() {
             Ok(guard) => guard,
-            Err(_) => {
-                eprintln!("[Audio Recorder] Failed to re-lock sample buffer");
-                return;
-            }
+            Err(_) => return,
         };
     }
     // Remaining samples (< required_chunk_size) stay in buffer for next call

@@ -1,0 +1,6 @@
+# Auto-generated files
+src/routeTree.gen.ts
+src/bindings.ts
+
+# UI components (shadcn/ui)
+src/components/ui/

@@ -20,8 +20,8 @@ export function ApiKeysStep() {
   // Sync state from config on initial load only
   useEffect(() => {
     if (config && !isInitialized.current) {
-      setActiveProvider(config.active_provider)
-      setExpandedSection(config.active_provider)
+      setActiveProvider(config.activeProvider)
+      setExpandedSection(config.activeProvider)
       isInitialized.current = true
     }
   }, [config])

@@ -11,6 +11,7 @@
     "updater:default",
     "core:app:allow-version",
     "dialog:default",
-    "process:default"
+    "process:default",
+    "log:default"
   ]
 }

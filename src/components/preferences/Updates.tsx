@@ -1,3 +1,4 @@
+import { error as logError } from '@tauri-apps/plugin-log'
 import { Button } from '../ui/button'
 import { useCheckForUpdates } from '@/hooks/useCheckForUpdates'
 
@@ -8,7 +9,7 @@ export function Updates() {
     try {
       await checkForUpdates.mutateAsync({ showNoUpdateMessage: true })
     } catch (e) {
-      console.error('[Updates] Failed to check for updates:', e)
+      logError(`[Updates] Failed to check for updates: ${e}`)
     }
   }
 

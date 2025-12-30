@@ -1,8 +1,6 @@
-use crate::recording::RecordingCommand;
-use std::sync::{
-    atomic::{AtomicU8, Ordering},
-    Arc,
-};
+use crate::recording::{RecordingCommand, RecordingState, RecordingStateManager};
+use log::error;
+use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use tokio::sync::mpsc;
 
@@ -25,14 +23,12 @@ impl KeyListener {
     #[cfg(target_os = "macos")]
     pub fn start(
         command_tx: mpsc::Sender<RecordingCommand>,
-        recording_state: Arc<AtomicU8>,
+        state_manager: Arc<RecordingStateManager>,
     ) -> Self {
         let thread_handle = thread::spawn(move || {
-            println!("[FN Key Listener] Starting CGEvent tap listener...");
-
-            if let Err(err) = run_event_tap(command_tx, recording_state) {
-                eprintln!(
-                    "[FN Key Listener] CGEvent tap failed: {}. Keyboard shortcuts will not work.",
+            if let Err(err) = run_event_tap(command_tx, state_manager) {
+                error!(
+                    "CGEvent tap failed: {}. Keyboard shortcuts will not work.",
                     err
                 );
             }
@@ -47,76 +43,19 @@ impl KeyListener {
 #[cfg(target_os = "macos")]
 struct CallbackState {
     command_tx: mpsc::Sender<RecordingCommand>,
-    recording_state: Arc<AtomicU8>,
+    state_manager: Arc<RecordingStateManager>,
     fn_down: bool,
-}
-
-#[cfg(target_os = "macos")]
-unsafe extern "C-unwind" fn tap_callback(
-    _proxy: CGEventTapProxy,
-    event_type: CGEventType,
-    cg_event: NonNull<CGEvent>,
-    user_info: *mut c_void,
-) -> *mut CGEvent {
-    // Key codes from <HIToolbox/Events.h>
-    const KEYCODE_FN: i64 = 63;
-    const KEYCODE_SPACE: i64 = 49;
-
-    let state = &mut *(user_info as *mut CallbackState);
-
-    let keycode =
-        CGEvent::integer_value_field(Some(cg_event.as_ref()), CGEventField::KeyboardEventKeycode);
-
-    match event_type {
-        CGEventType::KeyDown => {
-            if keycode == KEYCODE_FN {
-                state.fn_down = true;
-                let _ = state.command_tx.blocking_send(RecordingCommand::FnDown);
-                return std::ptr::null_mut(); // Swallow to block emoji picker
-            } else if keycode == KEYCODE_SPACE {
-                let current_state = state.recording_state.load(Ordering::Relaxed);
-                if current_state == 1 {
-                    // Only use Space to lock while actively recording; pass through otherwise
-                    let _ = state.command_tx.blocking_send(RecordingCommand::Lock);
-                    return std::ptr::null_mut(); // Avoid inserting a space while recording
-                }
-            }
-        }
-        CGEventType::KeyUp => {
-            if keycode == KEYCODE_FN {
-                state.fn_down = false;
-                let _ = state.command_tx.blocking_send(RecordingCommand::FnUp);
-                return std::ptr::null_mut(); // Swallow to block emoji picker
-            }
-        }
-        CGEventType::FlagsChanged => {
-            if keycode == KEYCODE_FN {
-                // Fn often arrives as FlagsChanged events; toggle based on last state
-                if state.fn_down {
-                    state.fn_down = false;
-                    let _ = state.command_tx.blocking_send(RecordingCommand::FnUp);
-                } else {
-                    state.fn_down = true;
-                    let _ = state.command_tx.blocking_send(RecordingCommand::FnDown);
-                }
-                return std::ptr::null_mut();
-            }
-        }
-        _ => {}
-    }
-
-    cg_event.as_ptr()
 }
 
 #[cfg(target_os = "macos")]
 fn run_event_tap(
     command_tx: mpsc::Sender<RecordingCommand>,
-    recording_state: Arc<AtomicU8>,
+    state_manager: Arc<RecordingStateManager>,
 ) -> Result<(), String> {
     unsafe {
         let callback_state = Box::new(CallbackState {
             command_tx,
-            recording_state,
+            state_manager,
             fn_down: false,
         });
         let user_info = Box::into_raw(callback_state) as *mut c_void;
@@ -150,4 +89,61 @@ fn run_event_tap(
     }
 
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+unsafe extern "C-unwind" fn tap_callback(
+    _proxy: CGEventTapProxy,
+    event_type: CGEventType,
+    cg_event: NonNull<CGEvent>,
+    user_info: *mut c_void,
+) -> *mut CGEvent {
+    // Key codes from <HIToolbox/Events.h>
+    const KEYCODE_FN: i64 = 63;
+    const KEYCODE_SPACE: i64 = 49;
+
+    let state = &mut *(user_info as *mut CallbackState);
+
+    let keycode =
+        CGEvent::integer_value_field(Some(cg_event.as_ref()), CGEventField::KeyboardEventKeycode);
+
+    match event_type {
+        CGEventType::KeyDown => {
+            if keycode == KEYCODE_FN {
+                state.fn_down = true;
+                let _ = state.command_tx.blocking_send(RecordingCommand::FnDown);
+                return std::ptr::null_mut(); // Swallow to block emoji picker
+            } else if keycode == KEYCODE_SPACE {
+                let current_state = state.state_manager.current();
+                if current_state == RecordingState::Recording {
+                    // Only use Space to lock while actively recording; pass through otherwise
+                    let _ = state.command_tx.blocking_send(RecordingCommand::Lock);
+                    return std::ptr::null_mut(); // Avoid inserting a space while recording
+                }
+            }
+        }
+        CGEventType::KeyUp => {
+            if keycode == KEYCODE_FN {
+                state.fn_down = false;
+                let _ = state.command_tx.blocking_send(RecordingCommand::FnUp);
+                return std::ptr::null_mut(); // Swallow to block emoji picker
+            }
+        }
+        CGEventType::FlagsChanged => {
+            if keycode == KEYCODE_FN {
+                // Fn often arrives as FlagsChanged events; toggle based on last state
+                if state.fn_down {
+                    state.fn_down = false;
+                    let _ = state.command_tx.blocking_send(RecordingCommand::FnUp);
+                } else {
+                    state.fn_down = true;
+                    let _ = state.command_tx.blocking_send(RecordingCommand::FnDown);
+                }
+                return std::ptr::null_mut();
+            }
+        }
+        _ => {}
+    }
+
+    cg_event.as_ptr()
 }

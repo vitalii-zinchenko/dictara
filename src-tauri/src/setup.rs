@@ -1,16 +1,16 @@
-#[cfg(not(debug_assertions))]
-use crate::updater::{self, UpdaterState};
+use crate::updater::{self, Updater};
 use crate::{
-    clients::openai::OpenAIClient,
     config::{self, AzureOpenAIConfig, OnboardingStep, OpenAIConfig, Provider},
     keyboard_listener::KeyListener,
     keychain::{self, ProviderAccount},
     recording::{
         cleanup_old_recordings, Controller, LastRecording, LastRecordingState, RecordingCommand,
+        RecordingStateManager,
     },
-    ui::{menu::build_menu, tray::PasteMenuItemState, window},
+    ui::{menu::Menu, tray::Tray, window},
 };
-use std::sync::{atomic::AtomicU8, Arc, Mutex};
+use log::{error, info, warn};
+use std::sync::{Arc, Mutex};
 use tauri::ipc::Channel;
 use tauri::Manager;
 use tauri_plugin_store::StoreExt;
@@ -25,7 +25,7 @@ pub struct AudioLevelChannel {
 }
 
 pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::error::Error>> {
-    println!("Dictara v{}", env!("CARGO_PKG_VERSION"));
+    info!("Dictara v{}", env!("CARGO_PKG_VERSION"));
 
     // Clean up old recordings from previous sessions
     cleanup_old_recordings(app.app_handle());
@@ -35,10 +35,7 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
     {
         let has_permission = macos_accessibility_client::accessibility::application_is_trusted();
         if !has_permission {
-            println!("⚠️  Accessibility permission not granted. Listener will fail.");
-            // Frontend will handle permission request flow
-        } else {
-            println!("Accessibility is granted!")
+            warn!("Accessibility permission not granted");
         }
     }
 
@@ -48,9 +45,6 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
         app.set_activation_policy(tauri::ActivationPolicy::Accessory);
     }
 
-    // Initialize OpenAI client (always succeeds, key checked at transcription time)
-    let openai_client = OpenAIClient::new();
-
     // Load app config and check if properly configured
     let store = app.store("config.json")?;
     let app_config = config::load_app_config(&store);
@@ -58,7 +52,6 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
 
     // Handle pending restart from accessibility step
     if onboarding_config.pending_restart {
-        println!("🔄 Resuming onboarding after restart...");
         onboarding_config.pending_restart = false;
 
         // Check if accessibility is now granted
@@ -67,10 +60,7 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
             let has_accessibility =
                 macos_accessibility_client::accessibility::application_is_trusted();
             if has_accessibility {
-                println!("✅ Accessibility granted after restart, moving to API Keys step");
                 onboarding_config.current_step = OnboardingStep::ApiKeys;
-            } else {
-                println!("⚠️  Accessibility still not granted, staying on accessibility step");
             }
         }
 
@@ -96,16 +86,11 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
     };
 
     if needs_configuration {
-        println!("⚠️  AI provider not configured.");
-    } else {
-        println!("✅ AI provider configured successfully");
+        warn!("AI provider not configured");
     }
 
     // Determine if we need to show onboarding
     let show_onboarding = !onboarding_config.finished;
-    if show_onboarding {
-        println!("🚀 Onboarding not finished, will show onboarding window");
-    }
 
     // ========================================
     // CHANNEL-BASED ARCHITECTURE WITH CONTROLLER
@@ -114,7 +99,7 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
 
     // Create channel for recording commands (KeyListener → Controller)
     let (command_tx, command_rx) = mpsc::channel::<RecordingCommand>(100);
-    let recording_state = Arc::new(AtomicU8::new(0));
+    let state_manager = Arc::new(RecordingStateManager::new());
 
     // Clone sender for Tauri state (mpsc::Sender is Clone + Send + Sync)
     let command_sender_state = RecordingCommandSender {
@@ -129,14 +114,17 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
     // Create last recording state for paste retry functionality
     let last_recording_state: LastRecordingState = Arc::new(Mutex::new(LastRecording::new()));
 
-    // Initialize controller with OpenAI client
+    let menu = Menu::new(app)?;
+    let _tray = Tray::new(app, &menu)?;
+
+    // Initialize controller (transcriber created on-demand from config)
     let controller = Controller::new(
         command_rx,
         app.app_handle().clone(),
-        openai_client,
-        recording_state.clone(),
+        state_manager.clone(),
         audio_level_channel.channel.clone(),
         last_recording_state.clone(),
+        menu,
     );
 
     // Spawn controller in blocking thread (cpal::Stream is not Send)
@@ -157,92 +145,24 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
     let has_accessibility = true;
 
     if has_accessibility {
-        let _listener = KeyListener::start(command_tx, recording_state.clone());
-    } else {
-        println!("⚠️  Skipping keyboard listener - accessibility not granted yet");
+        let _listener = KeyListener::start(command_tx, state_manager.clone());
     }
 
-    let menu_with_items = build_menu(app)?;
-    let paste_menu_item_state = PasteMenuItemState {
-        item: menu_with_items.paste_last_item,
-    };
-
-    // Build tray icon with template image for menu bar
-    const TRAY_ICON_BYTES: &[u8] = include_bytes!("../icons/tray-icon.png");
-    let tray_icon_image = image::load_from_memory(TRAY_ICON_BYTES)
-        .expect("Failed to load tray icon")
-        .to_rgba8();
-    let (width, height) = tray_icon_image.dimensions();
-    let tray_icon = tauri::image::Image::new_owned(tray_icon_image.into_raw(), width, height);
-
-    let _tray = tauri::tray::TrayIconBuilder::new()
-        .icon(tray_icon)
-        .icon_as_template(true) // macOS template image - auto-adapts to light/dark mode
-        .menu(&menu_with_items.menu)
-        .show_menu_on_left_click(true)
-        .on_menu_event(|app, event| {
-            match event.id().as_ref() {
-                "about" => {
-                    println!("About clicked - placeholder");
-                    // TODO: Implement About dialog
-                }
-                "preferences" => {
-                    println!("Preferences clicked");
-                    if let Err(e) = window::open_preferences_window(app) {
-                        eprintln!("Failed to open preferences window: {}", e);
-                    }
-                }
-                "paste_last_recording" => {
-                    println!("Paste Last Recording clicked");
-                    // Get the last recording state
-                    if let Some(state) = app.try_state::<LastRecordingState>() {
-                        if let Ok(last_recording) = state.lock() {
-                            if let Some(text) = &last_recording.text {
-                                // Paste the last recording
-                                if let Err(e) =
-                                    crate::clipboard_paste::auto_paste_text_cgevent(text)
-                                {
-                                    eprintln!("Failed to paste last recording: {:?}", e);
-                                }
-                            } else {
-                                println!("No text available to paste");
-                            }
-                        } else {
-                            eprintln!("Failed to lock last recording state");
-                        }
-                    } else {
-                        eprintln!("Last recording state not available");
-                    }
-                }
-                "quit" => {
-                    println!("Quit clicked");
-                    app.exit(0);
-                }
-                _ => {}
-            }
-        })
-        .build(app)?;
-
-    app.manage(paste_menu_item_state);
-
-    // Initialize and start the updater (only in release builds)
-    #[cfg(not(debug_assertions))]
-    {
-        let updater_state = Arc::new(UpdaterState::new(recording_state));
-        app.manage(updater_state.clone());
-        updater::start_periodic_update_check(app.app_handle().clone(), updater_state);
-    }
+    // Initialize and start the updater
+    // In debug mode: checks and downloads updates but skips installation
+    // In release mode: checks, downloads, and installs updates when user is idle
+    let updater = Arc::new(Updater::new(state_manager));
+    app.manage(updater.clone());
+    updater::start_periodic_update_check(app.app_handle().clone(), updater);
 
     // Decide which window to open
     if show_onboarding {
-        // Onboarding not finished - show onboarding window
         if let Err(e) = window::open_onboarding_window(app.app_handle()) {
-            eprintln!("Failed to open onboarding window: {}", e);
+            error!("Failed to open onboarding window: {}", e);
         }
     } else if needs_configuration {
-        // Onboarding finished but configuration missing - show preferences
         if let Err(e) = window::open_preferences_window(app.app_handle()) {
-            eprintln!("Failed to open preferences window: {}", e);
+            error!("Failed to open preferences window: {}", e);
         }
     }
 

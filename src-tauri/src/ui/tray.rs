@@ -1,37 +1,83 @@
-use derive_more::Display;
-use tauri::Manager;
+use crate::recording::LastRecordingState;
+use crate::ui::{
+    menu::{Menu, MenuId},
+    window,
+};
+use log::{error, warn};
+use std::str::FromStr;
+use tauri::{self, menu::MenuEvent, tray, Manager, Wry};
 
-// State for the paste last recording menu item
-pub struct PasteMenuItemState {
-    pub item: tauri::menu::MenuItem<tauri::Wry>,
+const TRAY_ICON_BYTES: &[u8] = include_bytes!("../../icons/tray-icon.png");
+
+pub struct Tray {
+    #[allow(dead_code)]
+    tray_icon: tray::TrayIcon<Wry>,
 }
 
-// Custom error type for tray operations
-#[derive(Debug, Display)]
-pub enum TrayError {
-    #[display("Tray state not found in app")]
-    StateNotFound,
-    #[display("Failed to set icon: {}", _0)]
-    IconSetFailed(String),
-}
+impl Tray {
+    pub fn new(app: &tauri::App<Wry>, menu: &Menu) -> Result<Self, tauri::Error> {
+        let icon = Self::load_icon();
+        let tray_icon = Self::build_tray(app, icon, menu)?;
 
-impl std::error::Error for TrayError {}
+        Ok(Tray { tray_icon })
+    }
 
-/// Updates the "Paste Last Recording" menu item enabled state
-pub fn update_paste_menu_item(
-    app_handle: &tauri::AppHandle,
-    enabled: bool,
-) -> Result<(), TrayError> {
-    println!("[Tray] Updating paste menu item - enabled: {}", enabled);
+    fn load_icon() -> tauri::image::Image<'static> {
+        let tray_icon_image = image::load_from_memory(TRAY_ICON_BYTES)
+            .expect("Failed to load tray icon")
+            .to_rgba8();
+        let (width, height) = tray_icon_image.dimensions();
+        tauri::image::Image::new_owned(tray_icon_image.into_raw(), width, height)
+    }
 
-    let state = app_handle
-        .try_state::<PasteMenuItemState>()
-        .ok_or(TrayError::StateNotFound)?;
+    fn build_tray(
+        app: &tauri::App<Wry>,
+        icon: tauri::image::Image<'static>,
+        menu: &Menu,
+    ) -> Result<tray::TrayIcon<Wry>, tauri::Error> {
+        tray::TrayIconBuilder::new()
+            .icon(icon)
+            .icon_as_template(true) // macOS template image - auto-adapts to light/dark mode
+            .menu(&menu.menu)
+            .show_menu_on_left_click(true)
+            .on_menu_event(Self::handle_menu_event)
+            .build(app)
+    }
 
-    state.item.set_enabled(enabled).map_err(|e| {
-        TrayError::IconSetFailed(format!("Failed to set menu item enabled state: {}", e))
-    })?;
+    fn handle_menu_event(app: &tauri::AppHandle<Wry>, event: MenuEvent) {
+        let Ok(menu_id) = MenuId::from_str(event.id().as_ref()) else {
+            warn!("Unknown menu event id: {}", event.id().as_ref());
+            return;
+        };
 
-    println!("[Tray]  Paste menu item updated successfully");
-    Ok(())
+        match menu_id {
+            MenuId::Preferences => {
+                if let Err(e) = window::open_preferences_window(app) {
+                    error!("Failed to open preferences window: {}", e);
+                }
+            }
+            MenuId::PasteLastRecording => {
+                Self::handle_paste_last_recording(app);
+            }
+            MenuId::Quit => {
+                app.exit(0);
+            }
+        }
+    }
+
+    // TODO: Refactor: I do not like this nesting. Will leave it like this for now and will refactor later.
+    // Also might need to pull the pasting into a separate module
+    fn handle_paste_last_recording(app: &tauri::AppHandle<Wry>) {
+        if let Some(state) = app.try_state::<LastRecordingState>() {
+            if let Ok(last_recording) = state.lock() {
+                if let Some(text) = &last_recording.text {
+                    if let Err(e) = crate::text_paster::paste_text(text) {
+                        error!("Failed to paste last recording: {:?}", e);
+                    }
+                }
+            } else {
+                error!("Failed to lock last recording state");
+            }
+        }
+    }
 }

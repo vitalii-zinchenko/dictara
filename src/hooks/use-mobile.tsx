@@ -1,4 +1,4 @@
-import * as React from "react"
+import * as React from 'react'
 
 // Mobile mode disabled - always use desktop sidebar layout
 export function useIsMobile() {

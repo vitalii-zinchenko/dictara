@@ -1,147 +1,140 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { error as logError } from '@tauri-apps/plugin-log'
+import { useEffect, useState, useCallback, useRef } from 'react'
 
 import {
   useCancelRecording,
   useStopRecording,
   useRetryTranscription,
   useDismissError,
-} from "@/hooks/useRecording";
-import { events, type RecordingStateChanged } from "@/bindings";
+} from '@/hooks/useRecording'
+import { events, type RecordingStateChanged } from '@/bindings'
 
-export type RecordingState = "recording" | "transcribing" | "error";
+export type RecordingState = 'recording' | 'transcribing' | 'error'
 
 // Extract error type from the discriminated union
-export type RecordingErrorPayload = Extract<
-  RecordingStateChanged,
-  { state: "error" }
->;
+export type RecordingErrorPayload = Extract<RecordingStateChanged, { state: 'error' }>
 
 // Re-export for external use
-export type { RecordingStateChanged };
+export type { RecordingStateChanged }
 
 // Callback type for event handling
-export type RecordingEventHandler = (event: RecordingStateChanged) => void;
+export type RecordingEventHandler = (event: RecordingStateChanged) => void
 
 interface UseRecordingStateMachineResult {
-  state: RecordingState;
-  error: RecordingErrorPayload | null;
-  handleCancel: () => Promise<void>;
-  handleStop: () => Promise<void>;
-  handleRetry: () => Promise<void>;
-  handleDismiss: () => Promise<void>;
-  isCancelPending: boolean;
-  isStopPending: boolean;
-  isRetryPending: boolean;
-  isDismissPending: boolean;
+  state: RecordingState
+  error: RecordingErrorPayload | null
+  handleCancel: () => Promise<void>
+  handleStop: () => Promise<void>
+  handleRetry: () => Promise<void>
+  handleDismiss: () => Promise<void>
+  isCancelPending: boolean
+  isStopPending: boolean
+  isRetryPending: boolean
+  isDismissPending: boolean
 }
 
 export function useRecordingStateMachine(
   onEvent?: RecordingEventHandler
 ): UseRecordingStateMachineResult {
-  const [state, setState] = useState<RecordingState>("recording");
-  const [error, setError] = useState<RecordingErrorPayload | null>(null);
+  const [state, setState] = useState<RecordingState>('recording')
+  const [error, setError] = useState<RecordingErrorPayload | null>(null)
 
   // TanStack Query mutation hooks
-  const cancelRecording = useCancelRecording();
-  const stopRecording = useStopRecording();
-  const retryTranscription = useRetryTranscription();
-  const dismissError = useDismissError();
+  const cancelRecording = useCancelRecording()
+  const stopRecording = useStopRecording()
+  const retryTranscription = useRetryTranscription()
+  const dismissError = useDismissError()
 
   // Keep onEvent in a ref to avoid re-subscribing when callback changes
-  const onEventRef = useRef(onEvent);
+  const onEventRef = useRef(onEvent)
   useEffect(() => {
-    onEventRef.current = onEvent;
-  }, [onEvent]);
+    onEventRef.current = onEvent
+  }, [onEvent])
 
   // Handlers
   const handleCancel = useCallback(async () => {
-    console.log("Cancel clicked");
     try {
-      await cancelRecording.mutateAsync();
+      await cancelRecording.mutateAsync()
     } catch (err) {
-      console.error("Failed to cancel recording:", err);
+      logError(`Failed to cancel recording: ${err}`)
     }
-  }, [cancelRecording]);
+  }, [cancelRecording])
 
   const handleStop = useCallback(async () => {
-    console.log("Stop recording clicked");
     try {
-      await stopRecording.mutateAsync();
+      await stopRecording.mutateAsync()
     } catch (err) {
-      console.error("Failed to stop recording:", err);
+      logError(`Failed to stop recording: ${err}`)
     }
-  }, [stopRecording]);
+  }, [stopRecording])
 
   const handleRetry = useCallback(async () => {
-    console.log("Retry clicked");
-    setError(null);
-    setState("transcribing");
+    setError(null)
+    setState('transcribing')
 
     try {
-      await retryTranscription.mutateAsync();
+      await retryTranscription.mutateAsync()
     } catch (err) {
-      console.error("Retry failed:", err);
+      logError(`Retry failed: ${err}`)
       // Error will be re-emitted via event
     }
-  }, [retryTranscription]);
+  }, [retryTranscription])
 
   const handleDismiss = useCallback(async () => {
-    console.log("Dismiss clicked");
     try {
-      await dismissError.mutateAsync();
+      await dismissError.mutateAsync()
     } catch (err) {
-      console.error("Failed to dismiss:", err);
+      logError(`Failed to dismiss: ${err}`)
     }
-  }, [dismissError]);
+  }, [dismissError])
 
   // Set up single typesafe event listener
   useEffect(() => {
     const setupListener = async () => {
       const unlisten = await events.recordingStateChanged.listen((event) => {
-        const payload = event.payload;
-        console.log("[Popup] Recording state changed:", payload.state);
+        const payload = event.payload
 
         // Update internal state based on event
         switch (payload.state) {
-          case "started":
-            setState("recording");
-            setError(null);
-            break;
+          case 'started':
+            setState('recording')
+            setError(null)
+            break
 
-          case "transcribing":
-            setState("transcribing");
-            break;
+          case 'transcribing':
+            setState('transcribing')
+            break
 
-          case "stopped":
-            setState("recording");
-            break;
+          case 'stopped':
+            setState('recording')
+            break
 
-          case "cancelled":
-            setState("recording");
-            break;
+          case 'cancelled':
+            setState('recording')
+            break
 
-          case "error":
-            setState("error");
-            setError(payload);
-            break;
+          case 'error':
+            setState('error')
+            setError(payload)
+            break
         }
 
         // Notify parent component about the event (for side effects like timer, resize)
-        onEventRef.current?.(payload);
-      });
+        onEventRef.current?.(payload)
+      })
 
-      return unlisten;
-    };
+      return unlisten
+    }
 
-    let cleanup: (() => void) | undefined;
+    let cleanup: (() => void) | undefined
     setupListener().then((cleanupFn) => {
-      cleanup = cleanupFn;
-    });
+      cleanup = cleanupFn
+    })
 
     return () => {
-      if (cleanup) cleanup();
-    };
-  }, []);
+      if (cleanup) cleanup()
+    }
+  }, [])
 
   return {
     state,
@@ -154,5 +147,5 @@ export function useRecordingStateMachine(
     isStopPending: stopRecording.isPending,
     isRetryPending: retryTranscription.isPending,
     isDismissPending: dismissError.isPending,
-  };
+  }
 }

@@ -1,3 +1,4 @@
+import { error as logError } from '@tauri-apps/plugin-log'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { StepContainer } from '../StepContainer'
 import { useOnboardingNavigation } from '@/hooks/useOnboardingNavigation'
@@ -24,8 +25,8 @@ export function AccessibilityStep() {
       // Mark pending restart so we resume correctly after restart
       await setPendingRestart.mutateAsync(true)
       await relaunch()
-    } catch (error) {
-      console.error('Failed to restart app:', error)
+    } catch (err) {
+      logError(`Failed to restart app: ${err}`)
     }
   }
 
@@ -70,9 +71,7 @@ export function AccessibilityStep() {
             </AlertDescription>
           </Alert>
 
-          <p className="text-sm text-muted-foreground">
-            You're all set! Click Next to continue.
-          </p>
+          <p className="text-sm text-muted-foreground">You're all set! Click Next to continue.</p>
         </div>
       </StepContainer>
     )

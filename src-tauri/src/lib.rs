@@ -1,5 +1,4 @@
 mod clients;
-mod clipboard_paste;
 mod config;
 mod error;
 mod keyboard_listener;
@@ -7,6 +6,7 @@ mod keychain;
 mod recording;
 mod setup;
 mod tauri_commands;
+mod text_paster;
 mod ui;
 mod updater;
 
@@ -58,6 +58,16 @@ pub fn run() {
     // Load environment variables from .env file
     dotenvy::dotenv().ok();
 
+    // Initialize logging plugin with targets for development and production
+    let log_plugin = tauri_plugin_log::Builder::new()
+        .targets([
+            tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+            tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir { file_name: None }),
+            tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Webview),
+        ])
+        .level(log::LevelFilter::Info)
+        .build();
+
     // Build specta builder for type-safe commands and events
     let specta_builder = build_specta_builder();
 
@@ -72,6 +82,7 @@ pub fn run() {
         .expect("Failed to export TypeScript bindings");
 
     tauri::Builder::default()
+        .plugin(log_plugin)
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())

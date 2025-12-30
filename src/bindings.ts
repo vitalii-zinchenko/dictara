@@ -225,11 +225,11 @@ export type AppConfig = {
 /**
  * Currently active provider (only one can be active)
  */
-active_provider: Provider | null }
+activeProvider: Provider | null }
 /**
  * Azure OpenAI provider configuration (stored in keychain)
  */
-export type AzureOpenAIConfig = { api_key: string; endpoint: string }
+export type AzureOpenAIConfig = { apiKey: string; endpoint: string }
 /**
  * Onboarding configuration (stored locally)
  */
@@ -241,11 +241,11 @@ finished: boolean;
 /**
  * Current step in the onboarding flow
  */
-current_step: OnboardingStep; 
+currentStep: OnboardingStep; 
 /**
  * Flag to track if we're resuming after an accessibility restart
  */
-pending_restart: boolean }
+pendingRestart: boolean }
 /**
  * Onboarding step enum - tracks current position in the wizard
  */
@@ -253,7 +253,7 @@ export type OnboardingStep = "welcome" | "accessibility" | "api_keys" | "fn_hold
 /**
  * OpenAI provider configuration (stored in keychain)
  */
-export type OpenAIConfig = { api_key: string }
+export type OpenAIConfig = { apiKey: string }
 /**
  * Provider types supported by the application
  */

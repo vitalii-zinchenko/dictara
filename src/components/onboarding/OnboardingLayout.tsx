@@ -10,7 +10,7 @@ interface OnboardingLayoutProps {
 export function OnboardingLayout({ children }: OnboardingLayoutProps) {
   const { data: config, isLoading } = useOnboardingConfig()
 
-  const currentStepIndex = config ? getStepIndex(config.current_step) : 0
+  const currentStepIndex = config ? getStepIndex(config.currentStep) : 0
 
   if (isLoading) {
     return (

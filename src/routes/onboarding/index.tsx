@@ -1,4 +1,5 @@
 import { createFileRoute, Navigate } from '@tanstack/react-router'
+import { error as logError } from '@tauri-apps/plugin-log'
 import { useOnboardingConfig } from '@/hooks/useOnboardingConfig'
 import { stepToRoute } from '@/hooks/useOnboardingNavigation'
 
@@ -7,7 +8,7 @@ export const Route = createFileRoute('/onboarding/')({
 })
 
 function OnboardingIndex() {
-  const { data: config, isLoading, error } = useOnboardingConfig()
+  const { data: config, isLoading, error: configError } = useOnboardingConfig()
 
   if (isLoading) {
     return (
@@ -17,11 +18,11 @@ function OnboardingIndex() {
     )
   }
 
-  if (error) {
-    console.error('Failed to load onboarding config:', error)
+  if (configError) {
+    logError(`Failed to load onboarding config: ${configError}`)
   }
 
   // Redirect to appropriate step based on saved state
-  const targetRoute = stepToRoute(config?.current_step ?? 'welcome')
+  const targetRoute = stepToRoute(config?.currentStep ?? 'welcome')
   return <Navigate to={targetRoute} />
 }

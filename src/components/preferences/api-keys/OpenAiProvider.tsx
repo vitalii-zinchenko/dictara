@@ -1,4 +1,13 @@
+import {
+  useDeleteOpenAIConfig,
+  useOpenAIConfig,
+  useSaveOpenAIConfig,
+  useTestOpenAIConfig,
+} from '@/hooks/useOpenAIConfig'
+import { waitForPaint } from '@/utils/waitForPaint'
 import { useForm } from '@tanstack/react-form'
+import { error as logError } from '@tauri-apps/plugin-log'
+import { Loader2 } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
@@ -6,12 +15,6 @@ import { Label } from '../../ui/label'
 import { ProviderSection } from './ProviderSection'
 import type { Provider } from './types'
 import { MASKED_API_KEY_PLACEHOLDER } from './utils'
-import {
-  useOpenAIConfig,
-  useSaveOpenAIConfig,
-  useTestOpenAIConfig,
-  useDeleteOpenAIConfig,
-} from '@/hooks/useOpenAIConfig'
 
 interface OpenAIProviderProps {
   isActive: boolean
@@ -40,11 +43,14 @@ export function OpenAIProvider({
     },
     validators: {
       onSubmitAsync: async ({ value }) => {
-        // Validate the API key by testing it
-        console.log('[OpenAIProvider] Validating API key...')
+        // Workaround for TanStack Form not yielding to browser paint cycle
+        // See: https://github.com/TanStack/form/issues/1967
+        await waitForPaint()
 
         try {
-          const isValid = await testConfig.mutateAsync({ apiKey: value.apiKey })
+          const isValid = await testConfig.mutateAsync({
+            apiKey: value.apiKey,
+          })
 
           if (!isValid) {
             return {
@@ -55,7 +61,7 @@ export function OpenAIProvider({
 
           return undefined
         } catch (e) {
-          console.error('[OpenAIProvider] Validation failed:', e)
+          logError(`[OpenAIProvider] onSubmitAsync caught error: ${e}`)
           return {
             form: 'Failed to validate API key. Please try again.',
             fields: {},
@@ -64,35 +70,38 @@ export function OpenAIProvider({
       },
     },
     onSubmit: async ({ value }) => {
-      console.log('[OpenAIProvider] Saving config...')
       setSaveSuccess(false)
 
       try {
         await saveConfig.mutateAsync({ apiKey: value.apiKey })
-        console.log('[OpenAIProvider] Config saved successfully')
         setSaveSuccess(true)
         form.reset()
+        // Auto-enable the provider after successful save
+        if (!isActive) {
+          onToggleActive('open_ai')
+        }
       } catch (e) {
-        console.error('[OpenAIProvider] Failed to save config:', e)
+        logError(`[OpenAIProvider] Failed to save config: ${e}`)
       }
     },
   })
 
   const handleDelete = async () => {
-    console.log('[OpenAIProvider] Deleting config...')
     try {
       await deleteConfig.mutateAsync()
-      console.log('[OpenAIProvider] Config deleted successfully')
       setSaveSuccess(false)
       form.reset()
+      // Deactivate the provider if it was active
+      if (isActive) {
+        onToggleActive('open_ai')
+      }
     } catch (e) {
-      console.error('[OpenAIProvider] Failed to delete config:', e)
+      logError(`[OpenAIProvider] Failed to delete config: ${e}`)
     }
   }
 
   // Derive error message from mutations
-  const errorMessage =
-    saveConfig.error?.message || deleteConfig.error?.message
+  const errorMessage = saveConfig.error?.message || deleteConfig.error?.message
 
   if (isLoading) {
     return (
@@ -171,9 +180,7 @@ export function OpenAIProvider({
                   )}
                 </div>
                 {field.state.meta.isTouched && field.state.meta.errors.length > 0 && (
-                  <p className="text-sm text-destructive">
-                    {field.state.meta.errors.join(', ')}
-                  </p>
+                  <p className="text-sm text-destructive">{field.state.meta.errors.join(', ')}</p>
                 )}
               </div>
             )}
@@ -184,34 +191,30 @@ export function OpenAIProvider({
         <form.Subscribe selector={(state) => state.errorMap}>
           {(errorMap) => (
             <>
-              {errorMap.onSubmit && (
-                <p className="text-sm text-destructive">{errorMap.onSubmit}</p>
-              )}
+              {errorMap.onSubmit && <p className="text-sm text-destructive">{errorMap.onSubmit}</p>}
             </>
           )}
         </form.Subscribe>
         {errorMessage && <p className="text-sm text-destructive">{errorMessage}</p>}
-        {saveSuccess && (
-          <p className="text-sm text-green-600">Configuration saved successfully!</p>
-        )}
+        {saveSuccess && <p className="text-sm text-green-600">Configuration saved successfully!</p>}
 
         {/* Action buttons */}
         <div className="flex gap-2">
           <form.Subscribe
-            selector={(formState) => ({
-              canSubmit: formState.canSubmit,
-              isSubmitting: formState.isSubmitting,
-            })}
-          >
-            {({ canSubmit, isSubmitting }) => (
-              <Button
-                type="submit"
-                disabled={!canSubmit || isSubmitting}
-              >
-                {isSubmitting || saveConfig.isPending ? 'Saving...' : 'Save'}
+            selector={(state) => [state.canSubmit, state.isSubmitting]}
+            children={([canSubmit, isSubmitting]) => (
+              <Button type="submit" disabled={!canSubmit}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  'Save'
+                )}
               </Button>
             )}
-          </form.Subscribe>
+          />
         </div>
       </form>
     </ProviderSection>

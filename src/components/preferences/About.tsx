@@ -1,4 +1,5 @@
 import { getVersion } from '@tauri-apps/api/app'
+import { error as logError } from '@tauri-apps/plugin-log'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { ExternalLink, RotateCcw } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -10,12 +11,9 @@ export function About() {
 
   useEffect(() => {
     getVersion()
-      .then((v) => {
-        console.log('[About] App version loaded:', v)
-        setAppVersion(v)
-      })
+      .then((v) => setAppVersion(v))
       .catch((e: unknown) => {
-        console.error('[About] Failed to load app version:', e)
+        logError(`[About] Failed to load app version: ${e}`)
       })
   }, [])
 

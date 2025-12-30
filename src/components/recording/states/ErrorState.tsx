@@ -1,15 +1,15 @@
-import { X } from "lucide-react";
-import type { RecordingStateChanged } from "@/bindings";
+import { X } from 'lucide-react'
+import type { RecordingStateChanged } from '@/bindings'
 
 // Extract the error variant from the discriminated union
-type RecordingError = Extract<RecordingStateChanged, { state: "error" }>;
+type RecordingError = Extract<RecordingStateChanged, { state: 'error' }>
 
 interface ErrorStateProps {
-  error: RecordingError;
-  onRetry: () => void;
-  onDismiss: () => void;
-  isRetryPending: boolean;
-  isDismissPending: boolean;
+  error: RecordingError
+  onRetry: () => void
+  onDismiss: () => void
+  isRetryPending: boolean
+  isDismissPending: boolean
 }
 
 export function ErrorState({
@@ -24,9 +24,7 @@ export function ErrorState({
       {/* Error Message */}
       <div className="flex-1 min-w-0 overflow-hidden">
         <div className="text-red-400 text-xs font-semibold">
-          {error.errorType === "recording"
-            ? "Recording Failed"
-            : "Transcription Failed"}
+          {error.errorType === 'recording' ? 'Recording Failed' : 'Transcription Failed'}
         </div>
         <div className="text-gray-300 text-[10px] leading-tight line-clamp-2">
           {error.userMessage}
@@ -41,7 +39,7 @@ export function ErrorState({
             disabled={isRetryPending}
             className="h-6 px-2 text-[10px] rounded bg-gray-600 hover:bg-gray-500 text-white font-medium transition-colors flex items-center disabled:opacity-50"
           >
-            {isRetryPending ? "..." : "Retry"}
+            {isRetryPending ? '...' : 'Retry'}
           </button>
         )}
         <button
@@ -53,5 +51,5 @@ export function ErrorState({
         </button>
       </div>
     </div>
-  );
+  )
 }
