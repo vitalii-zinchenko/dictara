@@ -27,6 +27,29 @@ Turn your spoken words into text — in any app, any language.
 
 ---
 
+## Troubleshooting
+
+### Emoji Picker Appears When Using Fn Key
+
+If the emoji picker (or character viewer) appears when you press the Fn/Globe (🌐) key, you need to change your macOS keyboard settings:
+
+**Via System Settings (Recommended):**
+1. Open **System Settings** → **Keyboard**
+2. Find **"Press 🌐 key to"** dropdown
+3. Change it to **"Do Nothing"** or **"Change Input Source"**
+
+**Via Terminal:**
+```bash
+# Set Globe key to "Do Nothing"
+defaults write com.apple.HIToolbox AppleFnUsageType -int 0
+
+# Then log out and log back in, or restart your Mac
+```
+
+> **Note:** This is a macOS limitation. The Fn/Globe key triggers the emoji picker at a system level that applications cannot intercept.
+
+---
+
 ## Contributing
 
 We welcome contributions! Please see our [Contributing Guide](.github/CONTRIBUTING.md) to get started.

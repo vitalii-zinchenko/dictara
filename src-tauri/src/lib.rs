@@ -1,6 +1,7 @@
 mod clients;
 mod config;
 mod error;
+mod globe_key;
 mod keyboard_listener;
 mod keychain;
 mod recording;

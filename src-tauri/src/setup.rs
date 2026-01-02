@@ -1,6 +1,7 @@
 use crate::updater::{self, Updater};
 use crate::{
     config::{self, AzureOpenAIConfig, OnboardingStep, OpenAIConfig, Provider},
+    globe_key,
     keyboard_listener::KeyListener,
     keychain::{self, ProviderAccount},
     recording::{
@@ -157,6 +158,10 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
 
     // Decide which window to open
     if show_onboarding {
+        // During onboarding, silently fix the Globe key setting if it's set to "Show Emoji"
+        // This prevents the emoji picker from appearing when using Fn for recording
+        globe_key::fix_globe_key_if_needed();
+
         if let Err(e) = window::open_onboarding_window(app.app_handle()) {
             error!("Failed to open onboarding window: {}", e);
         }
