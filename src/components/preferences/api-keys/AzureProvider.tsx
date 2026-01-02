@@ -80,6 +80,10 @@ export function AzureOpenAIProvider({
         })
         setSaveSuccess(true)
         form.reset()
+        // Auto-enable the provider after successful save
+        if (!isActive) {
+          onToggleActive('azure_open_ai')
+        }
       } catch (e) {
         logError(`[AzureOpenAIProvider] Failed to save config: ${e}`)
       }
@@ -91,6 +95,10 @@ export function AzureOpenAIProvider({
       await deleteConfig.mutateAsync()
       setSaveSuccess(false)
       form.reset()
+      // Deactivate the provider if it was active
+      if (isActive) {
+        onToggleActive('azure_open_ai')
+      }
     } catch (e) {
       logError(`[AzureOpenAIProvider] Failed to delete config: ${e}`)
     }
