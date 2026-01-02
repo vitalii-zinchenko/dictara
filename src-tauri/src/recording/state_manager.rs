@@ -2,16 +2,19 @@
 //!
 //! State diagram:
 //! ```text
-//! Ready ──FnDown──> Recording ──FnUp──> Transcribing ──Complete──> Ready
-//!   │                   │                    │
-//! [Retry]            [Lock]               [Failed]
-//!   │                   ↓                    ↓
-//!   │          RecordingLocked             Ready (keeps audio for retry)
+//! Ready ──FnDown──> Recording ──FnUp──> Transcribing ──reset()──> Ready
+//!   │                   │
+//! [Retry]            [Lock]
+//!   │                   ↓
+//!   │          RecordingLocked
 //!   │                   │
 //!   │               [FnDown]──> Transcribing
 //!   │               [Cancel]──> Ready
 //!   └──────────────────────────> Transcribing
 //! ```
+//!
+//! Note: Transcribing state exits via reset() - no dedicated events needed
+//! since both success and failure return to Ready state.
 
 use std::sync::Mutex;
 
@@ -28,10 +31,6 @@ pub enum RecordingEvent {
     Cancel,
     /// Retry transcription with existing audio file
     Retry,
-    /// Transcription completed successfully
-    TranscriptionComplete,
-    /// Transcription failed
-    TranscriptionFailed,
 }
 
 /// Actions the Controller should perform after a state transition
@@ -186,17 +185,15 @@ impl RecordingStateManager {
                 _ => None,
             },
 
-            RecordingState::Transcribing => match event {
-                RecordingEvent::TranscriptionComplete | RecordingEvent::TranscriptionFailed => {
-                    Some((RecordingState::Ready, None))
-                }
-                _ => None,
-            },
+            // Transcribing state exits via reset() - no events trigger transitions
+            RecordingState::Transcribing => None,
         }
     }
 
-    /// Force reset to Ready state (for error recovery)
-    /// Use sparingly - prefer transition() for normal flow
+    /// Reset to Ready state
+    ///
+    /// Used to exit Transcribing state (both success and failure)
+    /// and for error recovery in other states.
     pub fn reset(&self) {
         *self.state.lock().unwrap() = RecordingState::Ready;
     }
