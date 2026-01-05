@@ -20,6 +20,14 @@ use crate::updater;
 /// Bytes per second for 16kHz mono 16-bit audio (~32KB/s)
 const AUDIO_BYTES_PER_SECOND: u64 = 32000;
 
+/// Minimum speech duration in milliseconds to proceed with transcription
+/// Audio shorter than this is considered "no speech detected"
+const MIN_SPEECH_DURATION_MS: u64 = 500;
+
+/// Whether to delete audio files after transcription completes
+/// Set to false to keep recordings for debugging
+const CLEANUP_AUDIO_AFTER_TRANSCRIPTION: bool = true;
+
 /// Error type for controller action failures
 ///
 /// Captures all context needed for centralized error handling:
@@ -76,6 +84,16 @@ impl ActionError {
             error_message: message.clone(),
             user_message: format!("Failed to stop recording: {}", message),
             audio_file_path,
+        }
+    }
+
+    /// Create a no-speech error (user didn't say anything)
+    fn no_speech() -> Self {
+        Self {
+            error_type: "no_speech".to_string(),
+            error_message: "No speech detected".to_string(),
+            user_message: "No speech detected. Please try again and speak clearly.".to_string(),
+            audio_file_path: None, // Don't keep silent audio for retry
         }
     }
 }
@@ -261,11 +279,36 @@ impl Controller {
             .stop()
             .map_err(|e| ActionError::stop(format!("{:?}", e), None))?;
 
+        // Check if enough speech was detected (VAD filtering may have removed everything)
+        if recording_result.speech_duration_ms < MIN_SPEECH_DURATION_MS {
+            log::info!(
+                "No speech detected: {}ms < {}ms minimum, skipping transcription",
+                recording_result.speech_duration_ms,
+                MIN_SPEECH_DURATION_MS
+            );
+
+            // Clean up the (nearly empty) audio file
+            if CLEANUP_AUDIO_AFTER_TRANSCRIPTION {
+                cleanup_recording_file(&recording_result.file_path);
+            }
+
+            // Hide recording popup
+            if let Err(e) = close_recording_popup(&self.app_handle) {
+                log::error!("Failed to close recording popup: {}", e);
+            }
+
+            return Err(ActionError::no_speech());
+        }
+
         if let Err(e) = RecordingStateChanged::Transcribing.emit(&self.app_handle) {
             log::error!("Failed to emit recording-transcribing event: {:?}", e);
         }
 
-        self.perform_transcription(&recording_result.file_path, recording_result.duration_ms)
+        // Use speech_duration_ms for validation (actual content duration, not wall-clock time)
+        self.perform_transcription(
+            &recording_result.file_path,
+            recording_result.speech_duration_ms,
+        )
     }
 
     fn handle_cancel(&self, recording: Recording) -> Result<(), ActionError> {
@@ -275,7 +318,9 @@ impl Controller {
             .map_err(|e| ActionError::cancel(format!("{:?}", e)))?;
 
         // Clean up the cancelled recording file immediately
-        cleanup_recording_file(&recording_result.file_path);
+        if CLEANUP_AUDIO_AFTER_TRANSCRIPTION {
+            cleanup_recording_file(&recording_result.file_path);
+        }
 
         // Hide recording popup window
         if let Err(e) = close_recording_popup(&self.app_handle) {
@@ -365,7 +410,9 @@ impl Controller {
         self.state_manager.reset();
 
         // Clean up recording file after successful transcription
-        cleanup_recording_file(audio_file_path);
+        if CLEANUP_AUDIO_AFTER_TRANSCRIPTION {
+            cleanup_recording_file(audio_file_path);
+        }
 
         if !text.is_empty() {
             crate::text_paster::paste_text(text).map_err(|e| {

@@ -3,14 +3,13 @@ mod commands;
 mod controller;
 pub mod events;
 mod state_manager;
+pub mod vad;
 
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 // Re-export state manager types
-pub use state_manager::{
-    RecordingAction, RecordingEvent, RecordingStateManager, TransitionResult,
-};
+pub use state_manager::{RecordingAction, RecordingEvent, RecordingStateManager, TransitionResult};
 
 // Public exports
 pub use audio_recorder::{

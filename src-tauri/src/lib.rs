@@ -66,7 +66,11 @@ pub fn run() {
             tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir { file_name: None }),
             tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Webview),
         ])
-        .level(log::LevelFilter::Info)
+        .level(if cfg!(debug_assertions) {
+            log::LevelFilter::Debug
+        } else {
+            log::LevelFilter::Info
+        })
         .build();
 
     // Build specta builder for type-safe commands and events
