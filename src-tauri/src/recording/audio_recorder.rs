@@ -1,8 +1,10 @@
+use audioadapter::Adapter;
+use audioadapter_buffers::direct::SequentialSliceOfVecs;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample};
 use hound::{WavSpec, WavWriter};
 use log::{error, info, warn};
-use rubato::{FftFixedInOut, Resampler};
+use rubato::{Fft, FixedSync, Resampler};
 use std::fs::{self, File};
 use std::io::{self, BufWriter};
 use std::path::PathBuf;
@@ -232,7 +234,7 @@ impl AudioRecorder {
         let channels = config.channels() as usize;
 
         let (resampler, required_chunk_size) =
-            match FftFixedInOut::<f32>::new(input_rate, output_rate, 1024, channels) {
+            match Fft::<f32>::new(input_rate, output_rate, 1024, 1, channels, FixedSync::Both) {
                 Ok(r) => {
                     let input_frames = r.input_frames_next();
                     (Arc::new(Mutex::new(r)), input_frames)
@@ -467,7 +469,7 @@ fn build_input_stream<T>(
     writer: Arc<Mutex<WavWriter<BufWriter<File>>>>,
     raw_writer: Option<Arc<Mutex<WavWriter<BufWriter<File>>>>>,
     level_channel: Option<Channel<f32>>,
-    resampler: Arc<Mutex<FftFixedInOut<f32>>>,
+    resampler: Arc<Mutex<Fft<f32>>>,
     sample_buffer: Arc<Mutex<Vec<Vec<f32>>>>,
     required_chunk_size: usize,
     needs_channel_conversion: bool,
@@ -516,7 +518,7 @@ fn write_input_data<T>(
     writer: &Arc<Mutex<WavWriter<BufWriter<File>>>>,
     raw_writer: &Option<Arc<Mutex<WavWriter<BufWriter<File>>>>>,
     level_channel: &Option<Channel<f32>>,
-    resampler: &Arc<Mutex<FftFixedInOut<f32>>>,
+    resampler: &Arc<Mutex<Fft<f32>>>,
     sample_buffer: &Arc<Mutex<Vec<Vec<f32>>>>,
     required_chunk_size: usize,
     needs_channel_conversion: bool,
@@ -571,32 +573,50 @@ fn write_input_data<T>(
         // Release buffer lock before resampling (to avoid holding multiple locks)
         drop(buffer_guard);
 
-        // Resample the chunk
-        let resampled = {
+        // Resample the chunk using the new adapter-based API
+        let mono_samples = {
             let mut resampler_guard = match resampler.lock() {
                 Ok(guard) => guard,
                 Err(_) => return,
             };
 
-            let channel_refs: Vec<&[f32]> = channel_chunks.iter().map(|v| v.as_slice()).collect();
+            let num_channels = channel_chunks.len();
+            let num_input_frames = required_chunk_size;
 
-            match resampler_guard.process(&channel_refs, None) {
-                Ok(resampled) => resampled,
+            // Create input adapter for the channel data
+            let input_adapter =
+                match SequentialSliceOfVecs::new(&channel_chunks, num_channels, num_input_frames) {
+                    Ok(adapter) => adapter,
+                    Err(_) => return,
+                };
+
+            // Process with new API: (input_adapter, input_offset, active_channels_mask)
+            let resampled = match resampler_guard.process(&input_adapter, 0, None) {
+                Ok(r) => r,
                 Err(_) => return,
-            }
-        };
+            };
 
-        // Convert to mono if needed (average stereo channels)
-        let mono_samples = if needs_channel_conversion && resampled.len() >= 2 {
-            let mut mono = Vec::with_capacity(resampled[0].len());
-            for (left, right) in resampled[0].iter().zip(resampled[1].iter()) {
-                let mixed = (left + right) / 2.0;
-                mono.push(mixed);
+            // Convert to mono using Adapter trait methods
+            let num_frames = resampled.frames();
+            let num_output_channels = resampled.channels();
+
+            if needs_channel_conversion && num_output_channels >= 2 {
+                // Average stereo channels to mono
+                let mut mono = Vec::with_capacity(num_frames);
+                for frame in 0..num_frames {
+                    let left = resampled.read_sample(0, frame).unwrap_or(0.0);
+                    let right = resampled.read_sample(1, frame).unwrap_or(0.0);
+                    mono.push((left + right) / 2.0);
+                }
+                mono
+            } else {
+                // Already mono, extract first channel
+                let mut mono = Vec::with_capacity(num_frames);
+                for frame in 0..num_frames {
+                    mono.push(resampled.read_sample(0, frame).unwrap_or(0.0));
+                }
+                mono
             }
-            mono
-        } else {
-            // Already mono, just use first channel
-            resampled[0].clone()
         };
 
         // Write raw audio before VAD (for debugging)
