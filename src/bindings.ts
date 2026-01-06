@@ -21,9 +21,9 @@ async loadAppConfig() : Promise<Result<AppConfig, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async saveAppConfig(activeProvider: string | null) : Promise<Result<null, string>> {
+async saveAppConfig(activeProvider: string | null, recordingTrigger: RecordingTrigger | null) : Promise<Result<null, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("save_app_config", { activeProvider }) };
+    return { status: "ok", data: await TAURI_INVOKE("save_app_config", { activeProvider, recordingTrigger }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -225,7 +225,11 @@ export type AppConfig = {
 /**
  * Currently active provider (only one can be active)
  */
-activeProvider: Provider | null }
+activeProvider: Provider | null; 
+/**
+ * Key used to trigger recording (default: Fn)
+ */
+recordingTrigger?: RecordingTrigger }
 /**
  * Azure OpenAI provider configuration (stored in keychain)
  */
@@ -282,6 +286,10 @@ export type RecordingStateChanged =
  * An error occurred during recording or transcription
  */
 { state: "error"; errorType: string; errorMessage: string; userMessage: string; audioFilePath: string | null }
+/**
+ * Recording trigger key options
+ */
+export type RecordingTrigger = "fn" | "control" | "option" | "command"
 
 /** tauri-specta globals **/
 

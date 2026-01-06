@@ -146,7 +146,9 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
     let has_accessibility = true;
 
     if has_accessibility {
-        let _listener = KeyListener::start(command_tx, state_manager.clone());
+        // Get the configured recording trigger key
+        let trigger_key = app_config.recording_trigger.to_key();
+        let _listener = KeyListener::start(command_tx, state_manager.clone(), trigger_key);
     }
 
     // Initialize and start the updater
@@ -156,9 +158,11 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
     app.manage(updater.clone());
     updater::start_periodic_update_check(app.app_handle().clone(), updater);
 
-    // Always fix the Globe key setting on app startup to prevent emoji picker from appearing
-    // when using Fn for recording (user may have changed settings or reinstalled macOS)
-    globe_key::fix_globe_key_if_needed();
+    // Only fix the Globe key setting when using Fn as the trigger
+    // This prevents the emoji picker from appearing when using Fn for recording
+    if app_config.recording_trigger == config::RecordingTrigger::Fn {
+        globe_key::fix_globe_key_if_needed();
+    }
 
     // Decide which window to open
     if show_onboarding {

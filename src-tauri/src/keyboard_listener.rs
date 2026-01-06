@@ -5,8 +5,7 @@ use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use tokio::sync::mpsc;
 
-/// Configurable trigger keys for recording actions
-const RECORDING_TRIGGER: Key = Key::Function;
+/// Lock modifier key (Space) for hands-free mode
 const LOCK_MODIFIER: Key = Key::Space;
 
 /// Keyboard listener that detects key events and emits recording commands
@@ -18,17 +17,39 @@ impl KeyListener {
     pub fn start(
         command_tx: mpsc::Sender<RecordingCommand>,
         state_manager: Arc<RecordingStateManager>,
+        recording_trigger: Key,
     ) -> Self {
+        // For non-Fn triggers, we also need to match the right-side variant
+        let trigger_alt = match recording_trigger {
+            Key::ControlLeft => Some(Key::ControlRight),
+            Key::MetaLeft => Some(Key::MetaRight),
+            _ => None,
+        };
+
         let thread_handle = thread::spawn(move || {
             if let Err(err) = grab(move |event| {
+                let is_trigger = |key: Key| {
+                    key == recording_trigger || trigger_alt.map_or(false, |alt| key == alt)
+                };
+
                 match event.event_type {
-                    EventType::KeyPress(key) if key == RECORDING_TRIGGER => {
+                    EventType::KeyPress(key) if is_trigger(key) => {
                         let _ = command_tx.blocking_send(RecordingCommand::StartRecording);
-                        None // Swallow to block emoji picker
+                        // Only swallow Fn key to block emoji picker; let other modifiers through
+                        if recording_trigger == Key::Function {
+                            None
+                        } else {
+                            Some(event)
+                        }
                     }
-                    EventType::KeyRelease(key) if key == RECORDING_TRIGGER => {
+                    EventType::KeyRelease(key) if is_trigger(key) => {
                         let _ = command_tx.blocking_send(RecordingCommand::StopRecording);
-                        None // Swallow to block emoji picker
+                        // Only swallow Fn key to block emoji picker; let other modifiers through
+                        if recording_trigger == Key::Function {
+                            None
+                        } else {
+                            Some(event)
+                        }
                     }
                     EventType::KeyPress(key) if key == LOCK_MODIFIER => {
                         if state_manager.is_busy() {

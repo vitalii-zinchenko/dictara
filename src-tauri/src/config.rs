@@ -14,6 +14,29 @@ pub enum Provider {
     AzureOpenAI,
 }
 
+/// Recording trigger key options
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum RecordingTrigger {
+    #[default]
+    Fn,
+    Control,
+    Option,
+    Command,
+}
+
+impl RecordingTrigger {
+    /// Convert to the keyboard crate's Key type
+    pub fn to_key(self) -> dictara_keyboard::Key {
+        match self {
+            RecordingTrigger::Fn => dictara_keyboard::Key::Function,
+            RecordingTrigger::Control => dictara_keyboard::Key::ControlLeft,
+            RecordingTrigger::Option => dictara_keyboard::Key::Alt,
+            RecordingTrigger::Command => dictara_keyboard::Key::MetaLeft,
+        }
+    }
+}
+
 /// App configuration (stored locally)
 #[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -21,6 +44,9 @@ pub struct AppConfig {
     /// Currently active provider (only one can be active)
     #[serde(alias = "active_provider")]
     pub active_provider: Option<Provider>,
+    /// Key used to trigger recording (default: Fn)
+    #[serde(default, alias = "recording_trigger")]
+    pub recording_trigger: RecordingTrigger,
 }
 
 /// OpenAI provider configuration (stored in keychain)

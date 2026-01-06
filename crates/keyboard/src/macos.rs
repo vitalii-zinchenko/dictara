@@ -12,8 +12,14 @@ use std::ptr::NonNull;
 /// State passed to the CGEvent callback.
 struct CallbackState {
     callback: Box<dyn FnMut(Event) -> Option<Event>>,
-    /// Track Fn key state for FlagsChanged events
+    /// Track modifier key states for FlagsChanged events
     fn_down: bool,
+    control_left_down: bool,
+    control_right_down: bool,
+    alt_down: bool,
+    alt_gr_down: bool,
+    meta_left_down: bool,
+    meta_right_down: bool,
 }
 
 /// Start grabbing keyboard events using CGEvent tap.
@@ -27,6 +33,12 @@ where
         let state = Box::new(CallbackState {
             callback: Box::new(callback),
             fn_down: false,
+            control_left_down: false,
+            control_right_down: false,
+            alt_down: false,
+            alt_gr_down: false,
+            meta_left_down: false,
+            meta_right_down: false,
         });
         let user_info = Box::into_raw(state) as *mut c_void;
 
@@ -87,16 +99,25 @@ unsafe extern "C-unwind" fn event_tap_callback(
         CGEventType::FlagsChanged => {
             // For modifier keys (including Fn), FlagsChanged is sent instead of KeyDown/KeyUp.
             // We track state to determine if it's a press or release.
-            if key == Key::Function {
-                if state.fn_down {
-                    state.fn_down = false;
-                    Some(Event::new(EventType::KeyRelease(key)))
-                } else {
-                    state.fn_down = true;
-                    Some(Event::new(EventType::KeyPress(key)))
+            let (is_down, set_down): (bool, &mut bool) = match key {
+                Key::Function => (state.fn_down, &mut state.fn_down),
+                Key::ControlLeft => (state.control_left_down, &mut state.control_left_down),
+                Key::ControlRight => (state.control_right_down, &mut state.control_right_down),
+                Key::Alt => (state.alt_down, &mut state.alt_down),
+                Key::AltGr => (state.alt_gr_down, &mut state.alt_gr_down),
+                Key::MetaLeft => (state.meta_left_down, &mut state.meta_left_down),
+                Key::MetaRight => (state.meta_right_down, &mut state.meta_right_down),
+                _ => {
+                    // For other modifiers (Shift, CapsLock, etc.), just emit as press
+                    return cg_event.as_ptr();
                 }
+            };
+
+            if is_down {
+                *set_down = false;
+                Some(Event::new(EventType::KeyRelease(key)))
             } else {
-                // For other modifiers, just emit as press (caller can track if needed)
+                *set_down = true;
                 Some(Event::new(EventType::KeyPress(key)))
             }
         }
