@@ -1,6 +1,9 @@
+import { useState } from 'react'
 import { error as logError } from '@tauri-apps/plugin-log'
+import { relaunch } from '@tauri-apps/plugin-process'
 import { useAppConfig } from '@/hooks/useAppConfig'
 import { useSaveAppConfig } from '@/hooks/useSaveAppConfig'
+import { Button } from '@/components/ui/button'
 import type { RecordingTrigger } from '@/bindings'
 
 const TRIGGER_OPTIONS: { value: RecordingTrigger; label: string; description: string }[] = [
@@ -13,14 +16,27 @@ const TRIGGER_OPTIONS: { value: RecordingTrigger; label: string; description: st
 export function Hotkeys() {
   const { data: appConfig, isLoading } = useAppConfig()
   const saveConfig = useSaveAppConfig()
+  const [selectedTrigger, setSelectedTrigger] = useState<RecordingTrigger | null>(null)
+  const [isRestarting, setIsRestarting] = useState(false)
 
-  const currentTrigger = appConfig?.recordingTrigger ?? 'fn'
+  const savedTrigger = appConfig?.recordingTrigger ?? 'fn'
+  const currentTrigger = selectedTrigger ?? savedTrigger
+  const hasChanges = selectedTrigger !== null && selectedTrigger !== savedTrigger
 
-  const handleTriggerChange = async (trigger: RecordingTrigger) => {
+  const handleTriggerChange = (trigger: RecordingTrigger) => {
+    setSelectedTrigger(trigger)
+  }
+
+  const handleSaveAndRestart = async () => {
+    if (!selectedTrigger) return
+
+    setIsRestarting(true)
     try {
-      await saveConfig.mutateAsync({ recordingTrigger: trigger })
+      await saveConfig.mutateAsync({ recordingTrigger: selectedTrigger })
+      await relaunch()
     } catch (e) {
-      logError(`[Hotkeys] Failed to save recording trigger: ${e}`)
+      logError(`[Hotkeys] Failed to save and restart: ${e}`)
+      setIsRestarting(false)
     }
   }
 
@@ -50,7 +66,7 @@ export function Hotkeys() {
               currentTrigger === option.value
                 ? 'border-primary bg-primary/5'
                 : 'border-border hover:border-primary/50'
-            } ${saveConfig.isPending ? 'pointer-events-none opacity-50' : ''}`}
+            } ${isRestarting ? 'pointer-events-none opacity-50' : ''}`}
           >
             <input
               type="radio"
@@ -58,7 +74,7 @@ export function Hotkeys() {
               value={option.value}
               checked={currentTrigger === option.value}
               onChange={() => handleTriggerChange(option.value)}
-              disabled={saveConfig.isPending}
+              disabled={isRestarting}
               className="h-4 w-4 accent-primary"
             />
             <div className="flex-1">
@@ -69,18 +85,15 @@ export function Hotkeys() {
         ))}
       </div>
 
-      {saveConfig.isPending && <p className="text-sm text-muted-foreground">Saving...</p>}
-
       {saveConfig.isError && (
         <p className="text-sm text-destructive">Failed to save. Please try again.</p>
       )}
 
-      <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3">
-        <p className="text-sm text-amber-600 dark:text-amber-400">
-          <strong>Note:</strong> Restart Dictara after changing the trigger key. If using Fn, make
-          sure your system's Globe key is set to "Do Nothing" in System Settings → Keyboard.
-        </p>
-      </div>
+      {hasChanges && (
+        <Button onClick={handleSaveAndRestart} disabled={isRestarting} className="w-full">
+          {isRestarting ? 'Restarting...' : 'Save & Restart'}
+        </Button>
+      )}
     </div>
   )
 }

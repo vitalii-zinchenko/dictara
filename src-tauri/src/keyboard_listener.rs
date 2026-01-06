@@ -19,37 +19,28 @@ impl KeyListener {
         state_manager: Arc<RecordingStateManager>,
         recording_trigger: Key,
     ) -> Self {
-        // For non-Fn triggers, we also need to match the right-side variant
+        // For triggers with both left and right keys, match both variants
+        // Note: Mac keyboards have left+right for Option and Command, but only left Control
         let trigger_alt = match recording_trigger {
-            Key::ControlLeft => Some(Key::ControlRight),
-            Key::MetaLeft => Some(Key::MetaRight),
+            Key::Alt => Some(Key::AltGr),          // Right Option key
+            Key::MetaLeft => Some(Key::MetaRight), // Right Command key
             _ => None,
         };
 
         let thread_handle = thread::spawn(move || {
             if let Err(err) = grab(move |event| {
-                let is_trigger = |key: Key| {
-                    key == recording_trigger || trigger_alt.map_or(false, |alt| key == alt)
-                };
+                let is_trigger = |key: Key| key == recording_trigger || trigger_alt == Some(key);
 
                 match event.event_type {
                     EventType::KeyPress(key) if is_trigger(key) => {
                         let _ = command_tx.blocking_send(RecordingCommand::StartRecording);
-                        // Only swallow Fn key to block emoji picker; let other modifiers through
-                        if recording_trigger == Key::Function {
-                            None
-                        } else {
-                            Some(event)
-                        }
+                        // Pass through - emoji picker is blocked by globe_key::fix_globe_key_if_needed()
+                        // which sets macOS system preference, not by swallowing events
+                        Some(event)
                     }
                     EventType::KeyRelease(key) if is_trigger(key) => {
                         let _ = command_tx.blocking_send(RecordingCommand::StopRecording);
-                        // Only swallow Fn key to block emoji picker; let other modifiers through
-                        if recording_trigger == Key::Function {
-                            None
-                        } else {
-                            Some(event)
-                        }
+                        Some(event)
                     }
                     EventType::KeyPress(key) if key == LOCK_MODIFIER => {
                         if state_manager.is_busy() {
