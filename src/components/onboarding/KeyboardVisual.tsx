@@ -1,36 +1,62 @@
 import { cn } from '@/lib/utils'
 
+export type KeyboardKey = 'fn' | 'control' | 'option' | 'command' | 'space'
+
 interface KeyboardVisualProps {
-  highlightedKeys: ('fn' | 'space')[]
-  pressedKeys?: ('fn' | 'space')[]
+  highlightedKeys: KeyboardKey[]
+  pressedKeys?: KeyboardKey[]
 }
 
 export function KeyboardVisual({ highlightedKeys, pressedKeys = [] }: KeyboardVisualProps) {
-  const isHighlighted = (key: 'fn' | 'space') => highlightedKeys.includes(key)
-  const isPressed = (key: 'fn' | 'space') => pressedKeys.includes(key)
+  const isHighlighted = (key: KeyboardKey) => highlightedKeys.includes(key)
+  const isPressed = (key: KeyboardKey) => pressedKeys.includes(key)
 
   return (
     <div className="bg-gray-100 p-4 rounded-sm inline-block max-w-full">
-      {/* Simplified keyboard layout - bottom row with FN and Space */}
+      {/* Simplified keyboard layout - bottom row with modifier keys and Space */}
       <div className="flex gap-1 items-center">
         <Key
           label="fn"
           isHighlighted={isHighlighted('fn')}
           isPressed={isPressed('fn')}
           className="w-10"
-          variant="dark"
         />
-        <Key label="^" className="w-10" />
-        <Key label="opt" className="w-10" />
-        <Key label="cmd" className="w-12" />
+        <Key
+          label="^"
+          isHighlighted={isHighlighted('control')}
+          isPressed={isPressed('control')}
+          className="w-10"
+        />
+        <Key
+          label="opt"
+          isHighlighted={isHighlighted('option')}
+          isPressed={isPressed('option')}
+          className="w-10"
+        />
+        <Key
+          label="cmd"
+          isHighlighted={isHighlighted('command')}
+          isPressed={isPressed('command')}
+          className="w-12"
+        />
         <Key
           label=""
           isHighlighted={isHighlighted('space')}
           isPressed={isPressed('space')}
           className="w-40"
         />
-        <Key label="cmd" className="w-12" />
-        <Key label="opt" className="w-10" />
+        <Key
+          label="cmd"
+          isHighlighted={isHighlighted('command')}
+          isPressed={isPressed('command')}
+          className="w-12"
+        />
+        <Key
+          label="opt"
+          isHighlighted={isHighlighted('option')}
+          isPressed={isPressed('option')}
+          className="w-10"
+        />
       </div>
     </div>
   )

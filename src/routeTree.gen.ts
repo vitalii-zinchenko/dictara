@@ -20,6 +20,7 @@ import { Route as PreferencesHotkeysRouteImport } from './routes/preferences/hot
 import { Route as PreferencesApiKeysRouteImport } from './routes/preferences/api-keys'
 import { Route as PreferencesAboutRouteImport } from './routes/preferences/about'
 import { Route as OnboardingWelcomeRouteImport } from './routes/onboarding/welcome'
+import { Route as OnboardingTriggerKeyRouteImport } from './routes/onboarding/trigger-key'
 import { Route as OnboardingFnSpaceRouteImport } from './routes/onboarding/fn-space'
 import { Route as OnboardingFnHoldRouteImport } from './routes/onboarding/fn-hold'
 import { Route as OnboardingCompleteRouteImport } from './routes/onboarding/complete'
@@ -81,6 +82,11 @@ const OnboardingWelcomeRoute = OnboardingWelcomeRouteImport.update({
   path: '/welcome',
   getParentRoute: () => OnboardingRouteRoute,
 } as any)
+const OnboardingTriggerKeyRoute = OnboardingTriggerKeyRouteImport.update({
+  id: '/trigger-key',
+  path: '/trigger-key',
+  getParentRoute: () => OnboardingRouteRoute,
+} as any)
 const OnboardingFnSpaceRoute = OnboardingFnSpaceRouteImport.update({
   id: '/fn-space',
   path: '/fn-space',
@@ -116,6 +122,7 @@ export interface FileRoutesByFullPath {
   '/onboarding/complete': typeof OnboardingCompleteRoute
   '/onboarding/fn-hold': typeof OnboardingFnHoldRoute
   '/onboarding/fn-space': typeof OnboardingFnSpaceRoute
+  '/onboarding/trigger-key': typeof OnboardingTriggerKeyRoute
   '/onboarding/welcome': typeof OnboardingWelcomeRoute
   '/preferences/about': typeof PreferencesAboutRoute
   '/preferences/api-keys': typeof PreferencesApiKeysRoute
@@ -131,6 +138,7 @@ export interface FileRoutesByTo {
   '/onboarding/complete': typeof OnboardingCompleteRoute
   '/onboarding/fn-hold': typeof OnboardingFnHoldRoute
   '/onboarding/fn-space': typeof OnboardingFnSpaceRoute
+  '/onboarding/trigger-key': typeof OnboardingTriggerKeyRoute
   '/onboarding/welcome': typeof OnboardingWelcomeRoute
   '/preferences/about': typeof PreferencesAboutRoute
   '/preferences/api-keys': typeof PreferencesApiKeysRoute
@@ -150,6 +158,7 @@ export interface FileRoutesById {
   '/onboarding/complete': typeof OnboardingCompleteRoute
   '/onboarding/fn-hold': typeof OnboardingFnHoldRoute
   '/onboarding/fn-space': typeof OnboardingFnSpaceRoute
+  '/onboarding/trigger-key': typeof OnboardingTriggerKeyRoute
   '/onboarding/welcome': typeof OnboardingWelcomeRoute
   '/preferences/about': typeof PreferencesAboutRoute
   '/preferences/api-keys': typeof PreferencesApiKeysRoute
@@ -170,6 +179,7 @@ export interface FileRouteTypes {
     | '/onboarding/complete'
     | '/onboarding/fn-hold'
     | '/onboarding/fn-space'
+    | '/onboarding/trigger-key'
     | '/onboarding/welcome'
     | '/preferences/about'
     | '/preferences/api-keys'
@@ -185,6 +195,7 @@ export interface FileRouteTypes {
     | '/onboarding/complete'
     | '/onboarding/fn-hold'
     | '/onboarding/fn-space'
+    | '/onboarding/trigger-key'
     | '/onboarding/welcome'
     | '/preferences/about'
     | '/preferences/api-keys'
@@ -203,6 +214,7 @@ export interface FileRouteTypes {
     | '/onboarding/complete'
     | '/onboarding/fn-hold'
     | '/onboarding/fn-space'
+    | '/onboarding/trigger-key'
     | '/onboarding/welcome'
     | '/preferences/about'
     | '/preferences/api-keys'
@@ -298,6 +310,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OnboardingWelcomeRouteImport
       parentRoute: typeof OnboardingRouteRoute
     }
+    '/onboarding/trigger-key': {
+      id: '/onboarding/trigger-key'
+      path: '/trigger-key'
+      fullPath: '/onboarding/trigger-key'
+      preLoaderRoute: typeof OnboardingTriggerKeyRouteImport
+      parentRoute: typeof OnboardingRouteRoute
+    }
     '/onboarding/fn-space': {
       id: '/onboarding/fn-space'
       path: '/fn-space'
@@ -342,6 +361,7 @@ interface OnboardingRouteRouteChildren {
   OnboardingCompleteRoute: typeof OnboardingCompleteRoute
   OnboardingFnHoldRoute: typeof OnboardingFnHoldRoute
   OnboardingFnSpaceRoute: typeof OnboardingFnSpaceRoute
+  OnboardingTriggerKeyRoute: typeof OnboardingTriggerKeyRoute
   OnboardingWelcomeRoute: typeof OnboardingWelcomeRoute
   OnboardingIndexRoute: typeof OnboardingIndexRoute
 }
@@ -352,6 +372,7 @@ const OnboardingRouteRouteChildren: OnboardingRouteRouteChildren = {
   OnboardingCompleteRoute: OnboardingCompleteRoute,
   OnboardingFnHoldRoute: OnboardingFnHoldRoute,
   OnboardingFnSpaceRoute: OnboardingFnSpaceRoute,
+  OnboardingTriggerKeyRoute: OnboardingTriggerKeyRoute,
   OnboardingWelcomeRoute: OnboardingWelcomeRoute,
   OnboardingIndexRoute: OnboardingIndexRoute,
 }

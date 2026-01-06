@@ -253,7 +253,7 @@ pendingRestart: boolean }
 /**
  * Onboarding step enum - tracks current position in the wizard
  */
-export type OnboardingStep = "welcome" | "accessibility" | "api_keys" | "fn_hold" | "fn_space" | "complete"
+export type OnboardingStep = "welcome" | "accessibility" | "api_keys" | "trigger_key" | "fn_hold" | "fn_space" | "complete"
 /**
  * OpenAI provider configuration (stored in keychain)
  */

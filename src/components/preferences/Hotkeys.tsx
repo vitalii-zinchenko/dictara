@@ -4,14 +4,8 @@ import { relaunch } from '@tauri-apps/plugin-process'
 import { useAppConfig } from '@/hooks/useAppConfig'
 import { useSaveAppConfig } from '@/hooks/useSaveAppConfig'
 import { Button } from '@/components/ui/button'
+import { TriggerKeySelector } from '@/components/TriggerKeySelector'
 import type { RecordingTrigger } from '@/bindings'
-
-const TRIGGER_OPTIONS: { value: RecordingTrigger; label: string; description: string }[] = [
-  { value: 'fn', label: 'Fn (Globe)', description: 'Hold the Fn/Globe key to record' },
-  { value: 'control', label: 'Control', description: 'Hold the Control key to record' },
-  { value: 'option', label: 'Option', description: 'Hold the Option key to record' },
-  { value: 'command', label: 'Command', description: 'Hold the Command key to record' },
-]
 
 export function Hotkeys() {
   const { data: appConfig, isLoading } = useAppConfig()
@@ -58,32 +52,11 @@ export function Hotkeys() {
         </p>
       </div>
 
-      <div className="space-y-2">
-        {TRIGGER_OPTIONS.map((option) => (
-          <label
-            key={option.value}
-            className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors ${
-              currentTrigger === option.value
-                ? 'border-primary bg-primary/5'
-                : 'border-border hover:border-primary/50'
-            } ${isRestarting ? 'pointer-events-none opacity-50' : ''}`}
-          >
-            <input
-              type="radio"
-              name="recordingTrigger"
-              value={option.value}
-              checked={currentTrigger === option.value}
-              onChange={() => handleTriggerChange(option.value)}
-              disabled={isRestarting}
-              className="h-4 w-4 accent-primary"
-            />
-            <div className="flex-1">
-              <p className="font-medium">{option.label}</p>
-              <p className="text-sm text-muted-foreground">{option.description}</p>
-            </div>
-          </label>
-        ))}
-      </div>
+      <TriggerKeySelector
+        value={currentTrigger}
+        onChange={handleTriggerChange}
+        disabled={isRestarting}
+      />
 
       {saveConfig.isError && (
         <p className="text-sm text-destructive">Failed to save. Please try again.</p>

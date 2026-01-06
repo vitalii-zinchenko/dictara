@@ -74,6 +74,8 @@ pub enum OnboardingStep {
     Accessibility,
     #[serde(rename = "api_keys")]
     ApiKeys,
+    #[serde(rename = "trigger_key")]
+    TriggerKey,
     #[serde(rename = "fn_hold")]
     FnHold,
     #[serde(rename = "fn_space")]
