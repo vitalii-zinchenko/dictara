@@ -227,7 +227,7 @@ impl AudioRecorder {
         };
 
         // Always create resampler (device sample rate → 16kHz)
-        let input_rate = config.sample_rate().0 as usize;
+        let input_rate = config.sample_rate() as usize;
         let output_rate = SAMPLE_RATE as usize;
         let channels = config.channels() as usize;
 
