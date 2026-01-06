@@ -10,6 +10,17 @@ pub enum TranscriptionError {
     IoError(#[from] std::io::Error),
     #[error("API key not configured")]
     ApiKeyMissing,
+    // Local model errors
+    #[error("No local model selected")]
+    NoModelSelected,
+    #[error("Model not found in catalog: {0}")]
+    ModelNotFound(String),
+    #[error("Model not downloaded: {0}")]
+    ModelNotDownloaded(String),
+    #[error("Failed to load model: {0}")]
+    ModelLoadFailed(String),
+    #[error("Local transcription failed: {0}")]
+    LocalTranscriptionFailed(String),
 }
 
 // TODO: this should be moved to the controller layer
@@ -39,6 +50,24 @@ impl TranscriptionError {
             }
             TranscriptionError::ApiKeyMissing => {
                 "API key not configured. Please add it in Preferences.".to_string()
+            }
+            TranscriptionError::NoModelSelected => {
+                "No local model selected. Please select a model in Preferences.".to_string()
+            }
+            TranscriptionError::ModelNotFound(name) => {
+                format!("Model '{}' not found. Please select a valid model.", name)
+            }
+            TranscriptionError::ModelNotDownloaded(name) => {
+                format!(
+                    "Model '{}' is not downloaded. Please download it first.",
+                    name
+                )
+            }
+            TranscriptionError::ModelLoadFailed(msg) => {
+                format!("Failed to load model: {}", msg)
+            }
+            TranscriptionError::LocalTranscriptionFailed(msg) => {
+                format!("Local transcription failed: {}", msg)
             }
         }
     }

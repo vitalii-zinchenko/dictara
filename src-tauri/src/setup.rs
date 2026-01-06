@@ -4,6 +4,7 @@ use crate::{
     globe_key,
     keyboard_listener::KeyListener,
     keychain::{self, ProviderAccount},
+    models::{ModelLoader, ModelManager},
     recording::{
         cleanup_old_recordings, Controller, LastRecording, LastRecordingState, RecordingCommand,
         RecordingStateManager,
@@ -69,6 +70,13 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
         config::save_onboarding_config(&store, &onboarding_config)?;
     }
 
+    // Initialize ModelManager and ModelLoader for local transcription
+    let model_manager = Arc::new(
+        ModelManager::new(app.app_handle())
+            .map_err(|e| format!("Failed to create ModelManager: {}", e))?,
+    );
+    let model_loader = Arc::new(ModelLoader::new(model_manager.models_dir().clone()));
+
     // Check if any provider is properly configured
     let needs_configuration = match &app_config.active_provider {
         Some(Provider::OpenAI) => {
@@ -83,11 +91,47 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
                 .flatten()
                 .is_none()
         }
+        Some(Provider::Local) => {
+            // Local provider is configured if a model is selected AND downloaded
+            let local_config = config::load_local_model_config(&store);
+            match local_config {
+                Some(cfg) => {
+                    cfg.selected_model.is_none()
+                        || !model_manager
+                            .is_model_downloaded(cfg.selected_model.as_deref().unwrap_or(""))
+                }
+                None => true,
+            }
+        }
         None => true,
     };
 
     if needs_configuration {
         warn!("AI provider not configured");
+    }
+
+    // Store model manager and loader in app state
+    app.manage(model_manager.clone());
+    app.manage(model_loader.clone());
+
+    // Eager load local model if Local provider is active and model is selected/downloaded
+    if app_config.active_provider == Some(Provider::Local) {
+        if let Some(local_config) = config::load_local_model_config(&store) {
+            if let Some(model_name) = local_config.selected_model {
+                if model_manager.is_model_downloaded(&model_name) {
+                    info!("Eagerly loading local model: {}", model_name);
+                    let loader = model_loader.clone();
+                    let app_handle = app.app_handle().clone();
+                    // Load in background to not block app startup
+                    // Use tauri::async_runtime::spawn which works in setup context
+                    tauri::async_runtime::spawn(async move {
+                        if let Err(e) = loader.load_model(&model_name, &app_handle).await {
+                            error!("Failed to load local model on startup: {}", e);
+                        }
+                    });
+                }
+            }
+        }
     }
 
     // Determine if we need to show onboarding

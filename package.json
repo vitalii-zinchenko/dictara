@@ -26,6 +26,7 @@
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-label": "^2.1.8",
+    "@radix-ui/react-progress": "^1.1.8",
     "@radix-ui/react-separator": "^1.1.8",
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-switch": "^1.2.6",
@@ -44,7 +45,7 @@
     "clsx": "^2.1.1",
     "ldrs": "^1.1.9",
     "lucide-react": "^0.562.0",
-    "react": "^19.1.0",
+    "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "tailwind-merge": "^3.4.0",
     "tailwindcss-animate": "^1.0.7"

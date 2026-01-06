@@ -93,6 +93,101 @@ async testAzureOpenaiConfig(apiKey: string, endpoint: string) : Promise<Result<b
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * Get list of all available models with their current status
+ */
+async getAvailableModels() : Promise<ModelInfo[]> {
+    return await TAURI_INVOKE("get_available_models");
+},
+/**
+ * Start downloading a model
+ */
+async downloadModel(modelName: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("download_model", { modelName }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Cancel an ongoing model download
+ */
+async cancelModelDownload(modelName: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("cancel_model_download", { modelName }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Delete a downloaded model
+ */
+async deleteModel(modelName: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_model", { modelName }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Load a model into memory for transcription
+ */
+async loadModel(modelName: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("load_model", { modelName }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Unload the currently loaded model (frees memory)
+ */
+async unloadModel() : Promise<void> {
+    await TAURI_INVOKE("unload_model");
+},
+/**
+ * Get the name of the currently loaded model
+ */
+async getLoadedModel() : Promise<string | null> {
+    return await TAURI_INVOKE("get_loaded_model");
+},
+/**
+ * Load local model configuration
+ */
+async loadLocalModelConfig() : Promise<Result<LocalModelConfig | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("load_local_model_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Save local model configuration (selected model)
+ */
+async saveLocalModelConfig(modelName: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("save_local_model_config", { modelName }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Delete local model configuration
+ */
+async deleteLocalModelConfig() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_local_model_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async stopRecording() : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("stop_recording") };
@@ -207,8 +302,12 @@ async restartOnboarding() : Promise<Result<null, string>> {
 
 
 export const events = __makeEvents__<{
+modelDownloadStateChanged: ModelDownloadStateChanged,
+modelLoadingStateChanged: ModelLoadingStateChanged,
 recordingStateChanged: RecordingStateChanged
 }>({
+modelDownloadStateChanged: "model-download-state-changed",
+modelLoadingStateChanged: "model-loading-state-changed",
 recordingStateChanged: "recording-state-changed"
 })
 
@@ -234,6 +333,54 @@ recordingTrigger?: RecordingTrigger }
  * Azure OpenAI provider configuration (stored in keychain)
  */
 export type AzureOpenAIConfig = { apiKey: string; endpoint: string }
+/**
+ * Local model provider configuration (stored in local store, not keychain)
+ */
+export type LocalModelConfig = { 
+/**
+ * Name of the selected model (e.g., "whisper-small")
+ */
+selectedModel: string | null }
+/**
+ * Model download state change event - single event stream for all download state transitions
+ */
+export type ModelDownloadStateChanged = 
+/**
+ * Download is in progress
+ */
+{ state: "progress"; modelName: string; downloadedBytes: number; totalBytes: number; percentage: number } | 
+/**
+ * Download complete, verifying checksum
+ */
+{ state: "verifying"; modelName: string } | 
+/**
+ * Download completed successfully
+ */
+{ state: "complete"; modelName: string } | 
+/**
+ * Download failed with an error
+ */
+{ state: "error"; modelName: string; error: string }
+/**
+ * Combined view sent to frontend (catalog + status merged).
+ */
+export type ModelInfo = { name: string; displayName: string; description: string; estimatedSizeBytes: number; estimatedRamMb: number; isDownloaded: boolean; isDownloading: boolean; isLoaded: boolean; isLoading: boolean; downloadedBytes: number }
+/**
+ * Model loading state change event - single event stream for all loading state transitions
+ */
+export type ModelLoadingStateChanged = 
+/**
+ * Model loading has started
+ */
+{ state: "started"; modelName: string } | 
+/**
+ * Model loaded successfully
+ */
+{ state: "complete"; modelName: string } | 
+/**
+ * Model loading failed with an error
+ */
+{ state: "error"; modelName: string; error: string }
 /**
  * Onboarding configuration (stored locally)
  */
@@ -261,7 +408,7 @@ export type OpenAIConfig = { apiKey: string }
 /**
  * Provider types supported by the application
  */
-export type Provider = "open_ai" | "azure_open_ai"
+export type Provider = "open_ai" | "azure_open_ai" | "local"
 /**
  * Recording state change event - single event stream for all state transitions
  */

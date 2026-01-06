@@ -1,15 +1,22 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use log::{error, info, warn};
+use log::{error, warn};
+use tauri::{AppHandle, Manager};
+use tauri_plugin_store::StoreExt;
 
-use crate::config::{AppConfig, AzureOpenAIConfig, OpenAIConfig, Provider};
+use crate::config::{self, AzureOpenAIConfig, LocalModelConfig, OpenAIConfig, Provider};
 use crate::keychain::{self, ProviderAccount};
+use crate::models::{is_model_in_catalog, ModelLoader, ModelManager};
 
+use super::api_transcriber::ApiTranscriber;
 use super::azure_client::AzureClient;
 use super::client::TranscriptionClient;
 use super::config::ApiConfig;
 use super::error::TranscriptionError;
+use super::local_transcriber::LocalTranscriber;
 use super::openai_client::OpenAIClient;
+use super::service::TranscriptionService;
 
 const MIN_AUDIO_DURATION_MS: u64 = 500; // Minimum 0.5 seconds
 const MAX_FILE_SIZE_BYTES: u64 = 25 * 1024 * 1024; // 25MB limit
@@ -17,28 +24,35 @@ const MAX_FILE_SIZE_BYTES: u64 = 25 * 1024 * 1024; // 25MB limit
 // Pre-generated 1-second silent WAV file (16kHz, mono) for API testing
 static SILENT_WAV: &[u8] = include_bytes!("../../assets/silent_1s.wav");
 
-/// Transcription service that orchestrates audio transcription
+/// Transcription service that orchestrates audio transcription.
 ///
-/// Uses a `TranscriptionClient` implementation based on the configured provider.
+/// Abstracts away the transcription implementation details - the caller
+/// doesn't need to know whether it's using an API or local model.
 pub struct Transcriber {
-    client: Box<dyn TranscriptionClient>,
+    service: Box<dyn TranscriptionService>,
 }
 
 impl Transcriber {
-    /// Create a new Transcriber from application config
+    /// Create a new Transcriber from application config and app handle.
     ///
-    /// Loads the appropriate client based on the active provider in config.
-    pub fn from_config(config: &AppConfig) -> Result<Self, TranscriptionError> {
-        let provider = config
+    /// The app handle is needed for local provider to access ModelLoader state.
+    pub fn from_app(app: &AppHandle) -> Result<Self, TranscriptionError> {
+        let store = app
+            .store("config.json")
+            .map_err(|e| TranscriptionError::ApiError(format!("Failed to open store: {}", e)))?;
+
+        let app_config = config::load_app_config(&store);
+
+        let provider = app_config
             .active_provider
             .as_ref()
             .ok_or(TranscriptionError::ApiKeyMissing)?;
 
-        let client = Self::create_client_from_keychain(provider)?;
-        Ok(Self { client })
+        let service = Self::create_service(provider, app)?;
+        Ok(Self { service })
     }
 
-    /// Test API credentials without creating a persistent instance
+    /// Test API credentials without creating a persistent instance.
     ///
     /// Creates a temporary client and attempts to transcribe the embedded silent audio.
     ///
@@ -47,20 +61,40 @@ impl Transcriber {
     /// * `Ok(false)` - Credentials are invalid (401 Unauthorized)
     /// * `Err(TranscriptionError)` - Network or other API error
     pub fn test_api_key(config: &ApiConfig) -> Result<bool, TranscriptionError> {
-        let client = Self::create_client_from_config(config);
-        let transcriber = Self { client };
+        let client = Self::create_client_from_explicit_config(config);
+        let service = ApiTranscriber::new(client);
 
-        match transcriber.transcribe_static_audio() {
+        // Create temp file for static audio
+        let temp_path = std::env::temp_dir().join("dictara_test_audio.wav");
+        std::fs::write(&temp_path, SILENT_WAV).map_err(|e| {
+            TranscriptionError::IoError(std::io::Error::other(format!(
+                "Failed to write test audio: {}",
+                e
+            )))
+        })?;
+
+        let result = match service.transcribe(&temp_path) {
             Ok(_) => Ok(true),
             Err(TranscriptionError::ApiError(msg)) if msg.contains("401") => {
                 warn!("API key is invalid (401 Unauthorized)");
                 Ok(false)
             }
             Err(e) => Err(e),
+        };
+
+        // Clean up temp file, log warning if it fails
+        if let Err(e) = std::fs::remove_file(&temp_path) {
+            warn!(
+                "Failed to clean up temp file '{}': {}. File may need manual cleanup.",
+                temp_path.display(),
+                e
+            );
         }
+
+        result
     }
 
-    /// Transcribe audio file to text
+    /// Transcribe audio file to text.
     ///
     /// # Arguments
     /// * `file_path` - Path to the audio file (WAV, MP3, etc.)
@@ -86,14 +120,28 @@ impl Transcriber {
         // Validate file
         self.validate_file(&file_path)?;
 
-        // Transcribe
-        self.do_transcribe_file(&file_path)
+        // Transcribe using the appropriate service
+        self.service.transcribe(&file_path)
     }
 
     // ========== Private methods ==========
 
-    /// Create client from keychain-stored credentials
-    fn create_client_from_keychain(
+    /// Create the appropriate transcription service based on provider.
+    fn create_service(
+        provider: &Provider,
+        app: &AppHandle,
+    ) -> Result<Box<dyn TranscriptionService>, TranscriptionError> {
+        match provider {
+            Provider::OpenAI | Provider::AzureOpenAI => {
+                let client = Self::create_api_client(provider)?;
+                Ok(Box::new(ApiTranscriber::new(client)))
+            }
+            Provider::Local => Self::create_local_service(app),
+        }
+    }
+
+    /// Create API client from keychain credentials.
+    fn create_api_client(
         provider: &Provider,
     ) -> Result<Box<dyn TranscriptionClient>, TranscriptionError> {
         match provider {
@@ -110,21 +158,63 @@ impl Transcriber {
                         .ok_or(TranscriptionError::ApiKeyMissing)?;
                 Ok(Box::new(AzureClient::new(config.api_key, config.endpoint)))
             }
+            Provider::Local => Err(TranscriptionError::ApiError(
+                "Local provider doesn't use API client".to_string(),
+            )),
         }
     }
 
-    /// Create client from explicit config (for testing credentials)
-    fn create_client_from_config(config: &ApiConfig) -> Box<dyn TranscriptionClient> {
+    /// Create local transcription service with validation.
+    fn create_local_service(
+        app: &AppHandle,
+    ) -> Result<Box<dyn TranscriptionService>, TranscriptionError> {
+        // Load local model config
+        let store = app
+            .store("config.json")
+            .map_err(|e| TranscriptionError::ApiError(format!("Failed to open store: {}", e)))?;
+
+        let local_config: Option<LocalModelConfig> = config::load_local_model_config(&store);
+        let selected_model = local_config
+            .and_then(|c| c.selected_model)
+            .ok_or(TranscriptionError::NoModelSelected)?;
+
+        // Validate model exists in catalog
+        if !is_model_in_catalog(&selected_model) {
+            return Err(TranscriptionError::ModelNotFound(selected_model));
+        }
+
+        // Validate model is downloaded
+        let model_manager = app.state::<Arc<ModelManager>>();
+        if !model_manager.is_model_downloaded(&selected_model) {
+            return Err(TranscriptionError::ModelNotDownloaded(selected_model));
+        }
+
+        // Get ModelLoader from Tauri state
+        let loader = app.state::<Arc<ModelLoader>>();
+
+        Ok(Box::new(LocalTranscriber::new(
+            loader.inner().clone(),
+            selected_model,
+        )))
+    }
+
+    /// Create client from explicit config (for testing credentials).
+    fn create_client_from_explicit_config(config: &ApiConfig) -> Box<dyn TranscriptionClient> {
         match config.provider {
             Provider::OpenAI => Box::new(OpenAIClient::new(config.api_key.clone())),
             Provider::AzureOpenAI => Box::new(AzureClient::new(
                 config.api_key.clone(),
                 config.endpoint.clone(),
             )),
+            Provider::Local => {
+                // Local provider doesn't use API testing - just return OpenAI client
+                // This code path shouldn't be reached for Local provider
+                Box::new(OpenAIClient::new(String::new()))
+            }
         }
     }
 
-    /// Validate file exists and is within size limits
+    /// Validate file exists and is within size limits.
     fn validate_file(&self, file_path: &Path) -> Result<(), TranscriptionError> {
         if !file_path.exists() {
             error!("File not found: {:?}", file_path);
@@ -147,66 +237,5 @@ impl Transcriber {
         }
 
         Ok(())
-    }
-
-    /// Transcribe the embedded silent audio (for testing)
-    fn transcribe_static_audio(&self) -> Result<String, TranscriptionError> {
-        self.do_transcribe_bytes(SILENT_WAV, "silent.wav")
-    }
-
-    /// Core transcription from file path
-    fn do_transcribe_file(&self, file_path: &Path) -> Result<String, TranscriptionError> {
-        let form = self.client.build_form_from_path(file_path)?;
-        self.send_and_parse(form)
-    }
-
-    /// Core transcription from bytes (for static test audio)
-    fn do_transcribe_bytes(
-        &self,
-        audio_bytes: &[u8],
-        filename: &str,
-    ) -> Result<String, TranscriptionError> {
-        let form = self.client.build_form_from_bytes(audio_bytes, filename)?;
-        self.send_and_parse(form)
-    }
-
-    /// Send request and parse response
-    fn send_and_parse(
-        &self,
-        form: reqwest::blocking::multipart::Form,
-    ) -> Result<String, TranscriptionError> {
-        let http_client = reqwest::blocking::Client::new();
-        let request = http_client.post(self.client.transcription_url());
-        let request = self.client.add_auth(request);
-
-        let response = request.multipart(form).send().map_err(|e| {
-            error!("API request error: {}", e);
-            TranscriptionError::ApiError(format!("Request failed: {}", e))
-        })?;
-
-        // Check response status
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response
-                .text()
-                .unwrap_or_else(|_| "Unknown error".to_string());
-            error!("API error response ({}): {}", status, error_text);
-            return Err(TranscriptionError::ApiError(format!(
-                "API returned status {}: {}",
-                status, error_text
-            )));
-        }
-
-        // Parse JSON response
-        let json: serde_json::Value = response.json().map_err(|e| {
-            error!("Failed to parse response: {}", e);
-            TranscriptionError::ApiError(format!("Failed to parse response: {}", e))
-        })?;
-
-        let text = json["text"].as_str().unwrap_or("").to_string();
-
-        info!("Transcription successful: {} characters", text.len());
-
-        Ok(text)
     }
 }

@@ -53,25 +53,4 @@ impl TranscriptionClient for AzureClient {
 
         Ok(form)
     }
-
-    fn build_form_from_bytes(
-        &self,
-        audio_bytes: &[u8],
-        filename: &str,
-    ) -> Result<reqwest::blocking::multipart::Form, TranscriptionError> {
-        let audio_part = reqwest::blocking::multipart::Part::bytes(audio_bytes.to_vec())
-            .file_name(filename.to_string())
-            .mime_str("audio/wav")
-            .map_err(|e| {
-                TranscriptionError::ApiError(format!("Failed to create audio part: {}", e))
-            })?;
-
-        // Azure doesn't need model in form - it's embedded in the endpoint URL
-        let form = reqwest::blocking::multipart::Form::new()
-            .part("file", audio_part)
-            .text("temperature", "0.0")
-            .text("response_format", "json");
-
-        Ok(form)
-    }
 }

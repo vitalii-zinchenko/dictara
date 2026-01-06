@@ -12,6 +12,8 @@ pub enum Provider {
         alias = "azure_open_a_i"
     )]
     AzureOpenAI,
+    #[serde(rename = "local")]
+    Local,
 }
 
 /// Recording trigger key options
@@ -62,6 +64,45 @@ pub struct OpenAIConfig {
 pub struct AzureOpenAIConfig {
     pub api_key: String,
     pub endpoint: String,
+}
+
+/// Local model provider configuration (stored in local store, not keychain)
+#[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalModelConfig {
+    /// Name of the selected model (e.g., "whisper-small")
+    pub selected_model: Option<String>,
+}
+
+/// Load local model configuration from store
+pub fn load_local_model_config(
+    store: &tauri_plugin_store::Store<tauri::Wry>,
+) -> Option<LocalModelConfig> {
+    store
+        .get("localModelConfig")
+        .and_then(|v| serde_json::from_value(v).ok())
+}
+
+/// Save local model configuration to store
+pub fn save_local_model_config(
+    store: &tauri_plugin_store::Store<tauri::Wry>,
+    config: &LocalModelConfig,
+) -> Result<(), String> {
+    store.set(
+        "localModelConfig",
+        serde_json::to_value(config).map_err(|e| e.to_string())?,
+    );
+    store.save().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Delete local model configuration from store
+pub fn delete_local_model_config(
+    store: &tauri_plugin_store::Store<tauri::Wry>,
+) -> Result<(), String> {
+    store.delete("localModelConfig");
+    store.save().map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 /// Onboarding step enum - tracks current position in the wizard

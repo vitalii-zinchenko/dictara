@@ -3,8 +3,7 @@ import { StepContainer } from '../StepContainer'
 import { useOnboardingNavigation } from '@/hooks/useOnboardingNavigation'
 import { useAppConfig } from '@/hooks/useAppConfig'
 import { useSaveAppConfig } from '@/hooks/useSaveAppConfig'
-import { OpenAIProvider } from '@/components/preferences/api-keys/OpenAiProvider'
-import { AzureOpenAIProvider } from '@/components/preferences/api-keys/AzureProvider'
+import { ProviderList } from '@/components/preferences/api-keys/ProviderList'
 import type { Provider } from '@/components/preferences/api-keys/types'
 
 export function ApiKeysStep() {
@@ -83,25 +82,16 @@ export function ApiKeysStep() {
     >
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Dictara uses OpenAI's Whisper model for speech recognition. You can use either OpenAI
-          directly or Azure OpenAI. Only one provider can be active at a time.
+          Choose how you want to transcribe speech. Use a cloud provider (OpenAI or Azure) or run
+          locally with no API key required. Only one provider can be active at a time.
         </p>
 
-        <div className="space-y-3">
-          <OpenAIProvider
-            isExpanded={expandedSection === 'open_ai'}
-            isActive={activeProvider === 'open_ai'}
-            onToggleExpand={handleToggleExpand}
-            onToggleActive={handleToggleProvider}
-          />
-
-          <AzureOpenAIProvider
-            isExpanded={expandedSection === 'azure_open_ai'}
-            isActive={activeProvider === 'azure_open_ai'}
-            onToggleExpand={handleToggleExpand}
-            onToggleActive={handleToggleProvider}
-          />
-        </div>
+        <ProviderList
+          activeProvider={activeProvider}
+          expandedSection={expandedSection}
+          onToggleExpand={handleToggleExpand}
+          onToggleActive={handleToggleProvider}
+        />
 
         {hasActiveProvider && (
           <p className="text-sm text-green-600 dark:text-green-400">

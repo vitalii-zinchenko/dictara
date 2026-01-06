@@ -1,4 +1,4 @@
-export type Provider = 'open_ai' | 'azure_open_ai' | null
+export type Provider = 'open_ai' | 'azure_open_ai' | 'local' | null
 
 export interface AppConfig {
   active_provider: Provider

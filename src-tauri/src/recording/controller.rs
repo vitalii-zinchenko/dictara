@@ -1,12 +1,10 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::ipc::Channel;
-use tauri_plugin_store::StoreExt;
 use tauri_specta::Event;
 use tokio::sync::mpsc::Receiver;
 
 use crate::clients::{Transcriber, TranscriptionError};
-use crate::config;
 use crate::recording::{
     audio_recorder::{cleanup_recording_file, AudioRecorder},
     commands::RecordingCommand,
@@ -373,26 +371,20 @@ impl Controller {
         self.perform_transcription(&audio_file_path, duration_ms)
     }
 
-    /// Shared transcription logic used by both handle_stop and handle_retry_transcription
+    /// Shared transcription logic used by both handle_stop and handle_retry_transcription.
+    ///
+    /// Uses the unified Transcriber abstraction which handles both API-based
+    /// (OpenAI, Azure) and local (Whisper) transcription transparently.
     fn perform_transcription(
         &self,
         audio_file_path: &str,
         duration_ms: u64,
     ) -> Result<(), ActionError> {
-        // Load provider config
-        let store = self.app_handle.store("config.json").map_err(|e| {
-            ActionError::transcription(
-                &TranscriptionError::ApiError(format!("Failed to load config: {}", e)),
-                audio_file_path.to_string(),
-            )
-        })?;
-        let app_config = config::load_app_config(&store);
-
-        // Create transcriber from config
-        let transcriber = Transcriber::from_config(&app_config)
+        // Create transcriber from app handle - handles all providers uniformly
+        let transcriber = Transcriber::from_app(&self.app_handle)
             .map_err(|e| ActionError::transcription(&e, audio_file_path.to_string()))?;
 
-        // Perform transcription
+        // Transcribe - the transcriber handles API vs local internally
         let text = transcriber
             .transcribe(PathBuf::from(audio_file_path), duration_ms)
             .map_err(|e| ActionError::transcription(&e, audio_file_path.to_string()))?;

@@ -1,9 +1,12 @@
+use std::sync::Arc;
+
 use crate::clients::{ApiConfig, Transcriber};
 use crate::config::{
-    self, AppConfig, AzureOpenAIConfig, OnboardingConfig, OnboardingStep, OpenAIConfig, Provider,
-    RecordingTrigger,
+    self, AppConfig, AzureOpenAIConfig, LocalModelConfig, OnboardingConfig, OnboardingStep,
+    OpenAIConfig, Provider, RecordingTrigger,
 };
 use crate::keychain::{self, ProviderAccount};
+use crate::models::{ModelInfo, ModelLoader, ModelManager};
 use crate::recording::{LastRecordingState, RecordingCommand};
 use crate::setup::{AudioLevelChannel, RecordingCommandSender};
 use crate::ui::window;
@@ -95,6 +98,7 @@ pub fn save_app_config(
         config.active_provider = Some(match p.as_str() {
             "open_ai" | "openai" => Provider::OpenAI,
             "azure_open_ai" | "azure_openai" | "azure" => Provider::AzureOpenAI,
+            "local" => Provider::Local,
             _ => {
                 error!("Invalid provider: {}", p);
                 return Err(format!("Invalid provider: {}", p));
@@ -358,4 +362,113 @@ pub fn restart_onboarding(app: tauri::AppHandle) -> Result<(), String> {
         error!("Failed to open onboarding window: {}", e);
         format!("Failed to open onboarding window: {}", e)
     })
+}
+
+// ===== LOCAL MODEL COMMANDS =====
+
+/// Get list of all available models with their current status
+#[tauri::command]
+#[specta::specta]
+pub fn get_available_models(
+    model_manager: State<Arc<ModelManager>>,
+    model_loader: State<Arc<ModelLoader>>,
+) -> Vec<ModelInfo> {
+    model_manager.get_all_models(&model_loader)
+}
+
+/// Start downloading a model
+#[tauri::command]
+#[specta::specta]
+pub async fn download_model(
+    model_manager: State<'_, Arc<ModelManager>>,
+    app: tauri::AppHandle,
+    model_name: String,
+) -> Result<(), String> {
+    model_manager.download_model(&model_name, app).await
+}
+
+/// Cancel an ongoing model download
+#[tauri::command]
+#[specta::specta]
+pub fn cancel_model_download(
+    model_manager: State<Arc<ModelManager>>,
+    model_name: String,
+) -> Result<(), String> {
+    model_manager.cancel_download(&model_name)
+}
+
+/// Delete a downloaded model
+#[tauri::command]
+#[specta::specta]
+pub fn delete_model(
+    model_manager: State<Arc<ModelManager>>,
+    model_loader: State<Arc<ModelLoader>>,
+    model_name: String,
+) -> Result<(), String> {
+    model_manager.delete_model(&model_name, &model_loader)
+}
+
+/// Load a model into memory for transcription
+#[tauri::command]
+#[specta::specta]
+pub async fn load_model(
+    model_loader: State<'_, Arc<ModelLoader>>,
+    app: tauri::AppHandle,
+    model_name: String,
+) -> Result<(), String> {
+    model_loader.load_model(&model_name, &app).await
+}
+
+/// Unload the currently loaded model (frees memory)
+#[tauri::command]
+#[specta::specta]
+pub fn unload_model(model_loader: State<Arc<ModelLoader>>) {
+    model_loader.unload_model()
+}
+
+/// Get the name of the currently loaded model
+#[tauri::command]
+#[specta::specta]
+pub fn get_loaded_model(model_loader: State<Arc<ModelLoader>>) -> Option<String> {
+    model_loader.get_loaded_model_name()
+}
+
+/// Load local model configuration
+#[tauri::command]
+#[specta::specta]
+pub fn load_local_model_config(app: tauri::AppHandle) -> Result<Option<LocalModelConfig>, String> {
+    let store = app.store("config.json").map_err(|e| {
+        error!("Failed to open store: {}", e);
+        format!("Failed to open store: {}", e)
+    })?;
+
+    Ok(config::load_local_model_config(&store))
+}
+
+/// Save local model configuration (selected model)
+#[tauri::command]
+#[specta::specta]
+pub fn save_local_model_config(app: tauri::AppHandle, model_name: String) -> Result<(), String> {
+    let store = app.store("config.json").map_err(|e| {
+        error!("Failed to open store: {}", e);
+        format!("Failed to open store: {}", e)
+    })?;
+
+    let config = LocalModelConfig {
+        selected_model: Some(model_name),
+    };
+
+    config::save_local_model_config(&store, &config)
+}
+
+/// Delete local model configuration
+#[tauri::command]
+#[specta::specta]
+pub fn delete_local_model_config(app: tauri::AppHandle) -> Result<(), String> {
+    let store = app.store("config.json").map_err(|e| {
+        error!("Failed to open store: {}", e);
+        format!("Failed to open store: {}", e)
+    })?;
+
+    config::delete_local_model_config(&store)
 }

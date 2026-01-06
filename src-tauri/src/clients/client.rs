@@ -23,11 +23,4 @@ pub trait TranscriptionClient: Send + Sync {
         &self,
         file_path: &Path,
     ) -> Result<reqwest::blocking::multipart::Form, TranscriptionError>;
-
-    /// Build multipart form from raw bytes (for testing with static audio)
-    fn build_form_from_bytes(
-        &self,
-        audio_bytes: &[u8],
-        filename: &str,
-    ) -> Result<reqwest::blocking::multipart::Form, TranscriptionError>;
 }
