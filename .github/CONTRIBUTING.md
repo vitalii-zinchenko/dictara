@@ -6,9 +6,43 @@ Thank you for your interest in contributing to Dictara! This document provides g
 
 ### Prerequisites
 
-- Node.js (LTS version)
-- Rust (stable)
-- npm
+- **Node.js** (LTS version 20.19+ or 22.12+)
+- **Rust** (stable) - [Install via rustup](https://rustup.rs)
+- **npm**
+
+#### Installing Rust (Required)
+
+If you don't have Rust installed, run:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+After installation, restart your terminal or run:
+
+```bash
+source "$HOME/.cargo/env"
+```
+
+Verify the installation:
+
+```bash
+cargo --version
+rustc --version
+```
+
+### Stopping the Production App
+
+If you have Dictara installed from the official release, quit it before running the development version to avoid conflicts:
+
+1. Click the Dictara icon in your menu bar
+2. Select **Quit**
+
+Or from the terminal:
+
+```bash
+pkill -x dictara
+```
 
 ### Development Setup
 
@@ -21,6 +55,12 @@ Thank you for your interest in contributing to Dictara! This document provides g
    ```bash
    npm run tauri dev
    ```
+   
+   > **Note:** The first build takes 5-10 minutes as it compiles ~500 Rust crates. Subsequent builds are much faster.
+
+4. The app will open automatically. You may need to:
+   - Grant **Accessibility permissions** in System Settings → Privacy & Security → Accessibility
+   - Configure an **OpenAI or Azure API key** in the app's preferences
 
 ## Development Workflow
 
