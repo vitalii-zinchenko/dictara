@@ -53,6 +53,7 @@
   "devDependencies": {
     "@commitlint/cli": "^20.3.0",
     "@commitlint/config-conventional": "^20.3.0",
+    "@tailwindcss/postcss": "^4.1.18",
     "@tanstack/router-devtools": "^1.144.0",
     "@tanstack/router-plugin": "^1.145.4",
     "@tauri-apps/cli": "^2",
