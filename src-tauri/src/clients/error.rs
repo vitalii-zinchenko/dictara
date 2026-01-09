@@ -10,6 +10,8 @@ pub enum TranscriptionError {
     IoError(#[from] std::io::Error),
     #[error("API key not configured")]
     ApiKeyMissing,
+    #[error("Transcription timed out after {0} seconds")]
+    TranscriptionTimeout(u64),
     // Local model errors
     #[error("No local model selected")]
     NoModelSelected,
@@ -50,6 +52,9 @@ impl TranscriptionError {
             }
             TranscriptionError::ApiKeyMissing => {
                 "API key not configured. Please add it in Preferences.".to_string()
+            }
+            TranscriptionError::TranscriptionTimeout(_) => {
+                "Transcription took too long. Try again.".to_string()
             }
             TranscriptionError::NoModelSelected => {
                 "No local model selected. Please select a model in Preferences.".to_string()

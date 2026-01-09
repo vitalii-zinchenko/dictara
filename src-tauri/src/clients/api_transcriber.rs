@@ -3,12 +3,14 @@
 //! Handles transcription via HTTP APIs (OpenAI, Azure OpenAI).
 
 use std::path::Path;
+use std::time::Duration;
 
 use log::{error, info};
 
 use super::client::TranscriptionClient;
 use super::error::TranscriptionError;
 use super::service::TranscriptionService;
+use super::transcriber::TRANSCRIPTION_TIMEOUT_SECS;
 
 /// API-based transcription service.
 ///
@@ -29,14 +31,28 @@ impl TranscriptionService for ApiTranscriber {
         // Build multipart form from file
         let form = self.client.build_form_from_path(audio_path)?;
 
-        // Send request
-        let http_client = reqwest::blocking::Client::new();
+        // Send request with timeout
+        let http_client = reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(TRANSCRIPTION_TIMEOUT_SECS))
+            .build()
+            .map_err(|e| {
+                TranscriptionError::ApiError(format!("Failed to create HTTP client: {}", e))
+            })?;
+
         let request = http_client.post(self.client.transcription_url());
         let request = self.client.add_auth(request);
 
         let response = request.multipart(form).send().map_err(|e| {
-            error!("API request error: {}", e);
-            TranscriptionError::ApiError(format!("Request failed: {}", e))
+            if e.is_timeout() {
+                error!(
+                    "API request timed out after {}s",
+                    TRANSCRIPTION_TIMEOUT_SECS
+                );
+                TranscriptionError::TranscriptionTimeout(TRANSCRIPTION_TIMEOUT_SECS)
+            } else {
+                error!("API request error: {}", e);
+                TranscriptionError::ApiError(format!("Request failed: {}", e))
+            }
         })?;
 
         // Check response status

@@ -21,6 +21,9 @@ use super::service::TranscriptionService;
 const MIN_AUDIO_DURATION_MS: u64 = 500; // Minimum 0.5 seconds
 const MAX_FILE_SIZE_BYTES: u64 = 25 * 1024 * 1024; // 25MB limit
 
+/// Timeout for transcription requests in seconds (applies to all providers)
+pub const TRANSCRIPTION_TIMEOUT_SECS: u64 = 10;
+
 // Pre-generated 1-second silent WAV file (16kHz, mono) for API testing
 static SILENT_WAV: &[u8] = include_bytes!("../../assets/silent_1s.wav");
 

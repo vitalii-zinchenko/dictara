@@ -22,6 +22,7 @@ If the mode is anything other than valid values, stop and let user know that it 
 ## Mode == amend
 
 - Amend the last commit: `git commit --amend`
+  - alter the message as well according to the latest changes
 - Push to the remote branch with force: `git push --force-with-lease`
 
 ## Mode == pr
@@ -38,7 +39,7 @@ The commit message should follow the "Conventional Commits" format.
 Also, the commit message should contain the details of the changes made.
 The commit body should contain the details of why that change was made and what was the impact of the change. It should be concise and easy to understand as the human will read it.
 
-Show user commit message and ask user if 
+Show user commit message and ask user if
 
 Format:
 
