@@ -7,7 +7,9 @@ description = "Cross-platform keyboard event grabbing with rdev-like API"
 
 [dependencies]
 thiserror = "2"
+log = "0.4"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2-core-graphics = "0.3.1"
 objc2-core-foundation = "0.3.1"
+macos-accessibility-client = "0.0.1"

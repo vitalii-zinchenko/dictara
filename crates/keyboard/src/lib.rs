@@ -37,6 +37,10 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum GrabError {
+    /// Accessibility permission is not granted (macOS).
+    #[error("Accessibility permission not granted")]
+    AccessibilityNotGranted,
+
     /// Failed to create event tap (macOS). Usually means accessibility permission is missing.
     #[error("Failed to create event tap (check accessibility permissions)")]
     EventTapError,

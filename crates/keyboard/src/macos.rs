@@ -1,6 +1,7 @@
 //! macOS implementation using CGEvent tap.
 
 use crate::{Event, EventType, GrabError, Key};
+use log::{error, info, warn};
 use objc2_core_foundation::{kCFRunLoopCommonModes, CFMachPort, CFRunLoop};
 use objc2_core_graphics::{
     kCGEventMaskForAllEvents, CGEvent, CGEventField, CGEventTapCallBack, CGEventTapLocation,
@@ -8,6 +9,26 @@ use objc2_core_graphics::{
 };
 use std::ffi::c_void;
 use std::ptr::NonNull;
+use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
+use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
+
+/// How often to check if accessibility permission is still granted.
+const ACCESSIBILITY_POLL_INTERVAL: Duration = Duration::from_millis(200);
+
+/// Global reference to the event tap for re-enabling after timeout.
+/// This is safe because we only have one tap per process.
+static TAP_REF: AtomicPtr<CFMachPort> = AtomicPtr::new(std::ptr::null_mut());
+
+/// Global reference to the run loop for stopping from the polling thread.
+///
+/// # Safety invariants
+///
+/// This pointer is valid as long as the main thread is blocked on `CFRunLoop::run()`.
+/// The polling thread may only dereference this pointer while it's running, and the
+/// main thread only clears this pointer AFTER joining the polling thread.
+static RUN_LOOP_REF: AtomicPtr<CFRunLoop> = AtomicPtr::new(std::ptr::null_mut());
 
 /// State passed to the CGEvent callback.
 struct CallbackState {
@@ -22,6 +43,12 @@ struct CallbackState {
     meta_right_down: bool,
 }
 
+/// Check if accessibility permission is currently granted.
+fn check_accessibility() -> bool {
+    // Use the macos-accessibility-client crate's function
+    macos_accessibility_client::accessibility::application_is_trusted()
+}
+
 /// Start grabbing keyboard events using CGEvent tap.
 ///
 /// This function blocks the current thread.
@@ -29,6 +56,11 @@ pub fn grab<F>(callback: F) -> Result<(), GrabError>
 where
     F: FnMut(Event) -> Option<Event> + 'static,
 {
+    // Check accessibility permission upfront for a clear error
+    if !check_accessibility() {
+        return Err(GrabError::AccessibilityNotGranted);
+    }
+
     unsafe {
         let state = Box::new(CallbackState {
             callback: Box::new(callback),
@@ -54,6 +86,12 @@ where
         )
         .ok_or(GrabError::EventTapError)?;
 
+        // Store tap reference globally so callback can re-enable it
+        // We need to store the raw pointer since CFMachPort isn't Send
+        // Use as_ref() to get the inner reference, then cast to raw pointer
+        let tap_ptr = (&*tap) as *const CFMachPort as *mut CFMachPort;
+        TAP_REF.store(tap_ptr, Ordering::SeqCst);
+
         let loop_source = CFMachPort::new_run_loop_source(None, Some(&tap), 0)
             .ok_or(GrabError::LoopSourceError)?;
 
@@ -62,12 +100,54 @@ where
         current_loop.add_source(Some(&loop_source), kCFRunLoopCommonModes);
 
         CGEvent::tap_enable(&tap, true);
+        info!("Event tap started successfully");
+
+        // Store run loop reference so the polling thread can stop it
+        let run_loop_ptr = (&*current_loop) as *const CFRunLoop as *mut CFRunLoop;
+        RUN_LOOP_REF.store(run_loop_ptr, Ordering::SeqCst);
+
+        // Start accessibility polling thread
+        // This thread checks every 200ms if accessibility permission is still granted
+        // If permission is revoked, it stops the run loop to prevent system freeze
+        let stop_polling = Arc::new(AtomicBool::new(false));
+        let stop_polling_clone = Arc::clone(&stop_polling);
+
+        let polling_thread = thread::Builder::new()
+            .name("accessibility-poll".to_string())
+            .spawn(move || {
+                info!("Accessibility polling thread started");
+                while !stop_polling_clone.load(Ordering::SeqCst) {
+                    thread::sleep(ACCESSIBILITY_POLL_INTERVAL);
+
+                    if !check_accessibility() {
+                        error!("Accessibility permission lost (detected by polling), stopping event tap");
+                        let rl_ptr = RUN_LOOP_REF.load(Ordering::SeqCst);
+                        if !rl_ptr.is_null() {
+                            // SAFETY: The run loop pointer is valid because:
+                            // 1. The main thread is blocked on CFRunLoop::run()
+                            // 2. Cleanup only happens AFTER this thread is joined
+                            // CFRunLoop::stop is thread-safe
+                            (*rl_ptr).stop();
+                        }
+                        break;
+                    }
+                }
+                info!("Accessibility polling thread stopped");
+            })
+            .expect("Failed to spawn accessibility polling thread");
 
         // This blocks until the run loop is stopped
         CFRunLoop::run();
 
-        // Cleanup if the loop ever exits
+        // Signal the polling thread to stop and wait for it
+        stop_polling.store(true, Ordering::SeqCst);
+        let _ = polling_thread.join();
+
+        // Cleanup - safe to clear now since polling thread has been joined
+        RUN_LOOP_REF.store(std::ptr::null_mut(), Ordering::SeqCst);
+        TAP_REF.store(std::ptr::null_mut(), Ordering::SeqCst);
         let _ = Box::from_raw(user_info as *mut CallbackState);
+        info!("Event tap stopped");
     }
 
     Ok(())
@@ -85,6 +165,48 @@ unsafe extern "C-unwind" fn event_tap_callback(
     cg_event: NonNull<CGEvent>,
     user_info: *mut c_void,
 ) -> *mut CGEvent {
+    // Handle tap disabled events first - these are critical for stability
+    match event_type {
+        CGEventType::TapDisabledByTimeout => {
+            warn!("Event tap disabled by timeout, checking accessibility...");
+            // Check if we still have accessibility permission before re-enabling
+            if check_accessibility() {
+                let tap_ptr = TAP_REF.load(Ordering::SeqCst);
+                if !tap_ptr.is_null() {
+                    CGEvent::tap_enable(&*tap_ptr, true);
+                    info!("Event tap re-enabled after timeout");
+                }
+            } else {
+                // No accessibility permission - stop gracefully instead of re-enabling
+                error!("Accessibility permission lost, stopping event tap");
+                if let Some(rl) = CFRunLoop::current() {
+                    rl.stop();
+                }
+            }
+            return cg_event.as_ptr();
+        }
+        CGEventType::TapDisabledByUserInput => {
+            warn!("Event tap disabled by user input, checking accessibility...");
+            // Check if accessibility permission is still granted
+            if check_accessibility() {
+                // Still have permission, re-enable the tap
+                let tap_ptr = TAP_REF.load(Ordering::SeqCst);
+                if !tap_ptr.is_null() {
+                    CGEvent::tap_enable(&*tap_ptr, true);
+                    info!("Event tap re-enabled after user input check");
+                }
+            } else {
+                // Accessibility was revoked - stop the run loop gracefully
+                error!("Accessibility permission revoked, stopping event tap");
+                if let Some(rl) = CFRunLoop::current() {
+                    rl.stop();
+                }
+            }
+            return cg_event.as_ptr();
+        }
+        _ => {}
+    }
+
     let state = &mut *(user_info as *mut CallbackState);
 
     // Get the keycode
