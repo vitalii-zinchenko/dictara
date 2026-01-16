@@ -1,22 +1,23 @@
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { useOnboardingNavigation } from '@/hooks/useOnboardingNavigation'
-import { useAppConfig } from '@/hooks/useAppConfig'
+import { useShortcutsConfig } from '@/hooks/useShortcutsConfig'
 import { CheckCircle2 } from 'lucide-react'
 import { useRef, useState } from 'react'
-import { KeyboardVisual } from '../KeyboardVisual'
 import { StepContainer } from '../StepContainer'
-import { getTriggerDisplayName, getTriggerKeyboardKey } from '../utils'
+
+function formatShortcutKeys(keys: Array<{ label: string }>): string {
+  return keys.map((k) => k.label).join(' + ')
+}
 
 export function FnHoldStep() {
   const { goNext, goBack, skipOnboarding, isNavigating } = useOnboardingNavigation()
-  const { data: config } = useAppConfig()
+  const { data: shortcuts } = useShortcutsConfig()
   const [inputValue, setInputValue] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const trigger = config?.recordingTrigger ?? 'fn'
-  const triggerName = getTriggerDisplayName(trigger)
-  const keyboardKey = getTriggerKeyboardKey(trigger)
+  const pushToRecordKeys = shortcuts?.pushToRecord.keys ?? []
+  const shortcutLabel = formatShortcutKeys(pushToRecordKeys)
 
   const handleReset = () => {
     setInputValue('')
@@ -33,7 +34,7 @@ export function FnHoldStep() {
   return (
     <StepContainer
       title="Push to Talk"
-      description={`Learn the first way to use Dictara: hold ${triggerName} while speaking.`}
+      description={`Learn the first way to use Dictara: hold ${shortcutLabel} while speaking.`}
       onNext={handleNext}
       nextDisabled={!isComplete}
       onBack={() => goBack('fn_hold')}
@@ -46,17 +47,13 @@ export function FnHoldStep() {
           <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
             <li>Click in the text field below</li>
             <li>
-              Press and hold the <strong>{triggerName}</strong> key
+              Press and hold <strong>{shortcutLabel}</strong>
             </li>
             <li>Speak</li>
             <li>
-              Release <strong>{triggerName}</strong> when done
+              Release <strong>{shortcutLabel}</strong> when done
             </li>
           </ol>
-        </div>
-
-        <div className="flex justify-center py-4">
-          <KeyboardVisual highlightedKeys={[keyboardKey]} pressedKeys={[keyboardKey]} />
         </div>
 
         <div className="space-y-3">
@@ -64,7 +61,7 @@ export function FnHoldStep() {
             <p className="text-sm font-medium">
               {!hasText && (
                 <>
-                  Hold <strong>{triggerName}</strong> and speak, then release when done
+                  Hold <strong>{shortcutLabel}</strong> and speak, then release when done
                 </>
               )}
               {hasText && 'Great job!'}

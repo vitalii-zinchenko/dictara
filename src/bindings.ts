@@ -356,6 +356,46 @@ async restartOnboarding() : Promise<Result<null, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async loadShortcutsConfig() : Promise<Result<ShortcutsConfig, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("load_shortcuts_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async saveShortcutsConfig(config: ShortcutsConfig) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("save_shortcuts_config", { config }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async resetShortcutsConfig() : Promise<Result<ShortcutsConfig, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("reset_shortcuts_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async startKeyCapture() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("start_key_capture") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async stopKeyCapture() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("stop_key_capture") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -363,10 +403,12 @@ async restartOnboarding() : Promise<Result<null, string>> {
 
 
 export const events = __makeEvents__<{
+keyCaptureEvent: KeyCaptureEvent,
 modelDownloadStateChanged: ModelDownloadStateChanged,
 modelLoadingStateChanged: ModelLoadingStateChanged,
 recordingStateChanged: RecordingStateChanged
 }>({
+keyCaptureEvent: "key-capture-event",
 modelDownloadStateChanged: "model-download-state-changed",
 modelLoadingStateChanged: "model-loading-state-changed",
 recordingStateChanged: "recording-state-changed"
@@ -394,6 +436,18 @@ recordingTrigger?: RecordingTrigger }
  * Azure OpenAI provider configuration (stored in keychain)
  */
 export type AzureOpenAIConfig = { apiKey: string; endpoint: string }
+/**
+ * Key capture event - streamed to frontend during shortcut configuration
+ */
+export type KeyCaptureEvent = 
+/**
+ * Key was pressed
+ */
+{ type: "keyDown"; keycode: number; label: string } | 
+/**
+ * Key was released
+ */
+{ type: "keyUp"; keycode: number; label: string }
 /**
  * Local model provider configuration (stored in local store, not keychain)
  */
@@ -461,7 +515,7 @@ pendingRestart: boolean }
 /**
  * Onboarding step enum - tracks current position in the wizard
  */
-export type OnboardingStep = "welcome" | "accessibility" | "microphone" | "api_keys" | "trigger_key" | "fn_hold" | "fn_space" | "complete"
+export type OnboardingStep = "welcome" | "accessibility" | "microphone" | "api_keys" | "shortcuts" | "fn_hold" | "fn_space" | "complete"
 /**
  * OpenAI provider configuration (stored in keychain)
  */
@@ -498,6 +552,26 @@ export type RecordingStateChanged =
  * Recording trigger key options
  */
 export type RecordingTrigger = "fn" | "control" | "option" | "command"
+/**
+ * A keyboard shortcut (1-3 keys)
+ */
+export type Shortcut = { keys: ShortcutKey[] }
+/**
+ * A single key in a shortcut combination
+ */
+export type ShortcutKey = { keycode: number; label: string }
+/**
+ * Complete shortcuts configuration
+ */
+export type ShortcutsConfig = { 
+/**
+ * Push-to-talk: Hold to record, release to stop
+ */
+pushToRecord: Shortcut; 
+/**
+ * Hands-free: Press to toggle (start/stop)
+ */
+handsFree: Shortcut }
 
 /** tauri-specta globals **/
 

@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "vite",
     "land": "cd landing && npm run dev",
-    "dev:tauri": "tauri dev",
-    "dev:tauri:no-reload": "tauri dev --no-watch",
+    "dev:tauri": "mkdir -p .logs && tauri dev 2>&1 | tee .logs/app.log",
+    "dev:tauri:no-reload": "mkdir -p .logs && tauri dev --no-watch 2>&1 | tee .logs/app.log",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",

@@ -115,6 +115,20 @@ pub enum Key {
     Dot,
     Slash,
 
+    // International keyboard keys
+    /// ISO Section key (§/±) - common on European keyboards
+    ISOSection,
+    /// JIS Yen key (¥) - Japanese keyboards
+    JISYen,
+    /// JIS Underscore key (_) - Japanese keyboards
+    JISUnderscore,
+    /// JIS Keypad Comma - Japanese keyboards
+    JISKeypadComma,
+    /// JIS Eisu key (英数) - switches to English input on Japanese keyboards
+    JISEisu,
+    /// JIS Kana key (かな) - switches to Japanese input on Japanese keyboards
+    JISKana,
+
     // Lock keys
     NumLock,
     ScrollLock,
@@ -149,7 +163,17 @@ pub enum Key {
     NextTrack,
     PlayPause,
 
-    // Unknown key with raw keycode
+    // macOS-specific keys
+    /// Mission Control key (some keyboards)
+    MissionControl,
+
+    /// Unknown/undocumented key with raw keycode.
+    ///
+    /// These are typically synthetic system events (e.g., keycode 179 after quick Fn tap)
+    /// or undocumented keycodes not defined in HIToolbox/Events.h.
+    ///
+    /// Note: Unknown keys are filtered out by the event callback and not passed to the
+    /// application, as they are not reliably reproducible and would confuse users.
     Unknown(u32),
 }
 
@@ -169,6 +193,7 @@ impl Key {
             7 => Key::KeyX,
             8 => Key::KeyC,
             9 => Key::KeyV,
+            10 => Key::ISOSection,
             11 => Key::KeyB,
             12 => Key::KeyQ,
             13 => Key::KeyW,
@@ -211,6 +236,7 @@ impl Key {
             50 => Key::BackQuote,
             51 => Key::Backspace,
             53 => Key::Escape,
+            54 => Key::MetaRight,
             55 => Key::MetaLeft,
             56 => Key::ShiftLeft,
             57 => Key::CapsLock,
@@ -243,13 +269,18 @@ impl Key {
             89 => Key::Kp7,
             91 => Key::Kp8,
             92 => Key::Kp9,
+            93 => Key::JISYen,
+            94 => Key::JISUnderscore,
+            95 => Key::JISKeypadComma,
             96 => Key::F5,
             97 => Key::F6,
             98 => Key::F7,
             99 => Key::F3,
             100 => Key::F8,
             101 => Key::F9,
+            102 => Key::JISEisu,
             103 => Key::F11,
+            104 => Key::JISKana,
             105 => Key::F13,
             106 => Key::F16,
             107 => Key::F14,
@@ -269,7 +300,297 @@ impl Key {
             124 => Key::RightArrow,
             125 => Key::DownArrow,
             126 => Key::UpArrow,
+            160 => Key::MissionControl,
             _ => Key::Unknown(code),
+        }
+    }
+
+    /// Convert a Key to macOS keycode
+    #[cfg(target_os = "macos")]
+    pub fn to_macos_keycode(&self) -> u32 {
+        match self {
+            Key::KeyA => 0,
+            Key::KeyS => 1,
+            Key::KeyD => 2,
+            Key::KeyF => 3,
+            Key::KeyH => 4,
+            Key::KeyG => 5,
+            Key::KeyZ => 6,
+            Key::KeyX => 7,
+            Key::KeyC => 8,
+            Key::KeyV => 9,
+            Key::ISOSection => 10,
+            Key::KeyB => 11,
+            Key::KeyQ => 12,
+            Key::KeyW => 13,
+            Key::KeyE => 14,
+            Key::KeyR => 15,
+            Key::KeyY => 16,
+            Key::KeyT => 17,
+            Key::Num1 => 18,
+            Key::Num2 => 19,
+            Key::Num3 => 20,
+            Key::Num4 => 21,
+            Key::Num6 => 22,
+            Key::Num5 => 23,
+            Key::Equal => 24,
+            Key::Num9 => 25,
+            Key::Num7 => 26,
+            Key::Minus => 27,
+            Key::Num8 => 28,
+            Key::Num0 => 29,
+            Key::RightBracket => 30,
+            Key::KeyO => 31,
+            Key::KeyU => 32,
+            Key::LeftBracket => 33,
+            Key::KeyI => 34,
+            Key::KeyP => 35,
+            Key::Return => 36,
+            Key::KeyL => 37,
+            Key::KeyJ => 38,
+            Key::Quote => 39,
+            Key::KeyK => 40,
+            Key::SemiColon => 41,
+            Key::BackSlash => 42,
+            Key::Comma => 43,
+            Key::Slash => 44,
+            Key::KeyN => 45,
+            Key::KeyM => 46,
+            Key::Dot => 47,
+            Key::Tab => 48,
+            Key::Space => 49,
+            Key::BackQuote => 50,
+            Key::Backspace => 51,
+            Key::Escape => 53,
+            Key::MetaRight => 54,
+            Key::MetaLeft => 55,
+            Key::ShiftLeft => 56,
+            Key::CapsLock => 57,
+            Key::Alt => 58,
+            Key::ControlLeft => 59,
+            Key::ShiftRight => 60,
+            Key::AltGr => 61,
+            Key::ControlRight => 62,
+            Key::Function => 63,
+            Key::F17 => 64,
+            Key::KpDelete => 65,
+            Key::KpMultiply => 67,
+            Key::KpPlus => 69,
+            Key::NumLock => 71,
+            Key::VolumeUp => 72,
+            Key::VolumeDown => 73,
+            Key::VolumeMute => 74,
+            Key::KpDivide => 75,
+            Key::KpReturn => 76,
+            Key::KpMinus => 78,
+            Key::F18 => 79,
+            Key::F19 => 80,
+            Key::F20 => 0, // No direct macOS keycode for F20
+            Key::Kp0 => 82,
+            Key::Kp1 => 83,
+            Key::Kp2 => 84,
+            Key::Kp3 => 85,
+            Key::Kp4 => 86,
+            Key::Kp5 => 87,
+            Key::Kp6 => 88,
+            Key::Kp7 => 89,
+            Key::Kp8 => 91,
+            Key::Kp9 => 92,
+            Key::JISYen => 93,
+            Key::JISUnderscore => 94,
+            Key::JISKeypadComma => 95,
+            Key::F5 => 96,
+            Key::F6 => 97,
+            Key::F7 => 98,
+            Key::F3 => 99,
+            Key::F8 => 100,
+            Key::F9 => 101,
+            Key::JISEisu => 102,
+            Key::F11 => 103,
+            Key::JISKana => 104,
+            Key::F13 => 105,
+            Key::F16 => 106,
+            Key::F14 => 107,
+            Key::F10 => 109,
+            Key::F12 => 111,
+            Key::F15 => 113,
+            Key::Insert => 114,
+            Key::Home => 115,
+            Key::PageUp => 116,
+            Key::Delete => 117,
+            Key::F4 => 118,
+            Key::End => 119,
+            Key::F2 => 120,
+            Key::PageDown => 121,
+            Key::F1 => 122,
+            Key::LeftArrow => 123,
+            Key::RightArrow => 124,
+            Key::DownArrow => 125,
+            Key::UpArrow => 126,
+            Key::MissionControl => 160,
+            Key::Unknown(code) => *code,
+            Key::PrintScreen | Key::Pause | Key::ScrollLock => 0, // No direct macOS equivalent
+            Key::BrightnessUp | Key::BrightnessDown | Key::PreviousTrack | Key::NextTrack
+            | Key::PlayPause => 0, // Media keys not commonly used for shortcuts
+        }
+    }
+
+    /// Get a human-readable label for the key
+    pub fn to_label(&self) -> String {
+        match self {
+            // Modifier keys
+            Key::Alt => "Option".to_string(),
+            Key::AltGr => "Right Option".to_string(),
+            Key::CapsLock => "Caps Lock".to_string(),
+            Key::ControlLeft => "Control".to_string(),
+            Key::ControlRight => "Right Control".to_string(),
+            Key::Function => "Fn".to_string(),
+            Key::MetaLeft => "Command".to_string(),
+            Key::MetaRight => "Right Command".to_string(),
+            Key::ShiftLeft => "Shift".to_string(),
+            Key::ShiftRight => "Right Shift".to_string(),
+
+            // Navigation
+            Key::UpArrow => "Up".to_string(),
+            Key::DownArrow => "Down".to_string(),
+            Key::LeftArrow => "Left".to_string(),
+            Key::RightArrow => "Right".to_string(),
+            Key::Home => "Home".to_string(),
+            Key::End => "End".to_string(),
+            Key::PageUp => "Page Up".to_string(),
+            Key::PageDown => "Page Down".to_string(),
+
+            // Editing
+            Key::Backspace => "Delete".to_string(),
+            Key::Delete => "Forward Delete".to_string(),
+            Key::Insert => "Help".to_string(),
+            Key::Return => "Return".to_string(),
+            Key::Space => "Space".to_string(),
+            Key::Tab => "Tab".to_string(),
+            Key::Escape => "Escape".to_string(),
+
+            // Function keys
+            Key::F1 => "F1".to_string(),
+            Key::F2 => "F2".to_string(),
+            Key::F3 => "F3".to_string(),
+            Key::F4 => "F4".to_string(),
+            Key::F5 => "F5".to_string(),
+            Key::F6 => "F6".to_string(),
+            Key::F7 => "F7".to_string(),
+            Key::F8 => "F8".to_string(),
+            Key::F9 => "F9".to_string(),
+            Key::F10 => "F10".to_string(),
+            Key::F11 => "F11".to_string(),
+            Key::F12 => "F12".to_string(),
+            Key::F13 => "F13".to_string(),
+            Key::F14 => "F14".to_string(),
+            Key::F15 => "F15".to_string(),
+            Key::F16 => "F16".to_string(),
+            Key::F17 => "F17".to_string(),
+            Key::F18 => "F18".to_string(),
+            Key::F19 => "F19".to_string(),
+            Key::F20 => "F20".to_string(),
+
+            // Number row
+            Key::Num0 => "0".to_string(),
+            Key::Num1 => "1".to_string(),
+            Key::Num2 => "2".to_string(),
+            Key::Num3 => "3".to_string(),
+            Key::Num4 => "4".to_string(),
+            Key::Num5 => "5".to_string(),
+            Key::Num6 => "6".to_string(),
+            Key::Num7 => "7".to_string(),
+            Key::Num8 => "8".to_string(),
+            Key::Num9 => "9".to_string(),
+
+            // Letters - just use the letter
+            Key::KeyA => "A".to_string(),
+            Key::KeyB => "B".to_string(),
+            Key::KeyC => "C".to_string(),
+            Key::KeyD => "D".to_string(),
+            Key::KeyE => "E".to_string(),
+            Key::KeyF => "F".to_string(),
+            Key::KeyG => "G".to_string(),
+            Key::KeyH => "H".to_string(),
+            Key::KeyI => "I".to_string(),
+            Key::KeyJ => "J".to_string(),
+            Key::KeyK => "K".to_string(),
+            Key::KeyL => "L".to_string(),
+            Key::KeyM => "M".to_string(),
+            Key::KeyN => "N".to_string(),
+            Key::KeyO => "O".to_string(),
+            Key::KeyP => "P".to_string(),
+            Key::KeyQ => "Q".to_string(),
+            Key::KeyR => "R".to_string(),
+            Key::KeyS => "S".to_string(),
+            Key::KeyT => "T".to_string(),
+            Key::KeyU => "U".to_string(),
+            Key::KeyV => "V".to_string(),
+            Key::KeyW => "W".to_string(),
+            Key::KeyX => "X".to_string(),
+            Key::KeyY => "Y".to_string(),
+            Key::KeyZ => "Z".to_string(),
+
+            // Punctuation
+            Key::BackQuote => "`".to_string(),
+            Key::Minus => "-".to_string(),
+            Key::Equal => "=".to_string(),
+            Key::LeftBracket => "[".to_string(),
+            Key::RightBracket => "]".to_string(),
+            Key::BackSlash => "\\".to_string(),
+            Key::SemiColon => ";".to_string(),
+            Key::Quote => "'".to_string(),
+            Key::Comma => ",".to_string(),
+            Key::Dot => ".".to_string(),
+            Key::Slash => "/".to_string(),
+
+            // Lock keys
+            Key::NumLock => "Num Lock".to_string(),
+            Key::ScrollLock => "Scroll Lock".to_string(),
+            Key::PrintScreen => "Print Screen".to_string(),
+            Key::Pause => "Pause".to_string(),
+
+            // Numpad
+            Key::Kp0 => "Numpad 0".to_string(),
+            Key::Kp1 => "Numpad 1".to_string(),
+            Key::Kp2 => "Numpad 2".to_string(),
+            Key::Kp3 => "Numpad 3".to_string(),
+            Key::Kp4 => "Numpad 4".to_string(),
+            Key::Kp5 => "Numpad 5".to_string(),
+            Key::Kp6 => "Numpad 6".to_string(),
+            Key::Kp7 => "Numpad 7".to_string(),
+            Key::Kp8 => "Numpad 8".to_string(),
+            Key::Kp9 => "Numpad 9".to_string(),
+            Key::KpDelete => "Numpad Delete".to_string(),
+            Key::KpReturn => "Numpad Enter".to_string(),
+            Key::KpMinus => "Numpad -".to_string(),
+            Key::KpPlus => "Numpad +".to_string(),
+            Key::KpMultiply => "Numpad *".to_string(),
+            Key::KpDivide => "Numpad /".to_string(),
+
+            // Media keys
+            Key::VolumeUp => "Volume Up".to_string(),
+            Key::VolumeDown => "Volume Down".to_string(),
+            Key::VolumeMute => "Mute".to_string(),
+            Key::BrightnessUp => "Brightness Up".to_string(),
+            Key::BrightnessDown => "Brightness Down".to_string(),
+            Key::PreviousTrack => "Previous Track".to_string(),
+            Key::NextTrack => "Next Track".to_string(),
+            Key::PlayPause => "Play/Pause".to_string(),
+
+            // International keyboard keys
+            Key::ISOSection => "§".to_string(),
+            Key::JISYen => "¥".to_string(),
+            Key::JISUnderscore => "_".to_string(),
+            Key::JISKeypadComma => "Keypad ,".to_string(),
+            Key::JISEisu => "英数".to_string(),
+            Key::JISKana => "かな".to_string(),
+
+            // macOS-specific keys
+            Key::MissionControl => "Mission Control".to_string(),
+
+            // Unknown
+            Key::Unknown(code) => format!("Key {}", code),
         }
     }
 }

@@ -56,6 +56,12 @@ macro_rules! with_commands {
             $crate::commands::skip_onboarding,
             $crate::commands::set_pending_restart,
             $crate::commands::restart_onboarding,
+            // Shortcuts
+            $crate::commands::load_shortcuts_config,
+            $crate::commands::save_shortcuts_config,
+            $crate::commands::reset_shortcuts_config,
+            $crate::commands::start_key_capture,
+            $crate::commands::stop_key_capture,
         ]
     };
 }

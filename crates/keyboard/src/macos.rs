@@ -214,6 +214,12 @@ unsafe extern "C-unwind" fn event_tap_callback(
         CGEvent::integer_value_field(Some(cg_event.as_ref()), CGEventField::KeyboardEventKeycode);
     let key = Key::from_macos_keycode(keycode as u32);
 
+    // Filter out unknown/undocumented keys (e.g., keycode 179 after quick Fn tap)
+    // These are typically synthetic system events that shouldn't be captured
+    if matches!(key, Key::Unknown(_)) {
+        return cg_event.as_ptr();
+    }
+
     // Convert to our event type
     let event = match event_type {
         CGEventType::KeyDown => Some(Event::new(EventType::KeyPress(key))),

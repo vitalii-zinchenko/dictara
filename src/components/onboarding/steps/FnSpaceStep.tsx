@@ -1,22 +1,25 @@
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { useOnboardingNavigation } from '@/hooks/useOnboardingNavigation'
-import { useAppConfig } from '@/hooks/useAppConfig'
+import { useShortcutsConfig } from '@/hooks/useShortcutsConfig'
 import { CheckCircle2 } from 'lucide-react'
 import { useRef, useState } from 'react'
-import { KeyboardVisual } from '../KeyboardVisual'
 import { StepContainer } from '../StepContainer'
-import { getTriggerDisplayName, getTriggerKeyboardKey } from '../utils'
+
+function formatShortcutKeys(keys: Array<{ label: string }>): string {
+  return keys.map((k) => k.label).join(' + ')
+}
 
 export function FnSpaceStep() {
   const { goNext, goBack, skipOnboarding, isNavigating } = useOnboardingNavigation()
-  const { data: config } = useAppConfig()
+  const { data: shortcuts } = useShortcutsConfig()
   const [inputValue, setInputValue] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const trigger = config?.recordingTrigger ?? 'fn'
-  const triggerName = getTriggerDisplayName(trigger)
-  const keyboardKey = getTriggerKeyboardKey(trigger)
+  const handsFreeKeys = shortcuts?.handsFree.keys ?? []
+  const pushToRecordKeys = shortcuts?.pushToRecord.keys ?? []
+  const handsFreeLabel = formatShortcutKeys(handsFreeKeys)
+  const stopLabel = formatShortcutKeys(pushToRecordKeys)
 
   const handleReset = () => {
     setInputValue('')
@@ -46,20 +49,13 @@ export function FnSpaceStep() {
           <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
             <li>Click in the text field below</li>
             <li>
-              Press <strong>{triggerName}</strong> + <strong>Space</strong> to start recording
+              Press <strong>{handsFreeLabel}</strong> to start recording
             </li>
             <li>Speak (hands-free!)</li>
             <li>
-              Press <strong>{triggerName}</strong> again to stop
+              Press <strong>{stopLabel}</strong> again to stop
             </li>
           </ol>
-        </div>
-
-        <div className="flex justify-center py-4">
-          <KeyboardVisual
-            highlightedKeys={[keyboardKey, 'space']}
-            pressedKeys={[keyboardKey, 'space']}
-          />
         </div>
 
         <div className="space-y-3">
@@ -67,8 +63,8 @@ export function FnSpaceStep() {
             <p className="text-sm font-medium">
               {!hasText && (
                 <>
-                  Press <strong>{triggerName}</strong> + <strong>Space</strong> to start, then{' '}
-                  <strong>{triggerName}</strong> to stop
+                  Press <strong>{handsFreeLabel}</strong> to start, then{' '}
+                  <strong>{stopLabel}</strong> to stop
                 </>
               )}
               {hasText && 'Perfect!'}

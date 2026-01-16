@@ -2,6 +2,7 @@ use crate::updater::{self, Updater};
 use crate::{
     config::{
         self, AzureOpenAIConfig, ConfigKey, ConfigStore, OnboardingStep, OpenAIConfig, Provider,
+        ShortcutsConfig,
     },
     globe_key,
     keyboard_listener::KeyListener,
@@ -62,6 +63,14 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
 
     let app_config = config_store.get(&ConfigKey::APP).unwrap_or_default();
     let mut onboarding_config = config_store.get(&ConfigKey::ONBOARDING).unwrap_or_default();
+
+    // Load or migrate shortcuts config
+    if let Err(e) = config::migrate_trigger_to_shortcuts(&config_store) {
+        warn!("Failed to migrate shortcuts config: {}", e);
+    }
+    let shortcuts_config = config_store
+        .get(&ConfigKey::<ShortcutsConfig>::SHORTCUTS)
+        .unwrap_or_default();
 
     // Handle pending restart from accessibility step
     if onboarding_config.pending_restart {
@@ -201,9 +210,11 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
     let has_accessibility = true;
 
     if has_accessibility {
-        // Get the configured recording trigger key
-        let trigger_key = app_config.recording_trigger.to_key();
-        let _listener = KeyListener::start(command_tx, state_manager.clone(), trigger_key);
+        let listener =
+            KeyListener::start(command_tx, state_manager.clone(), shortcuts_config.clone());
+
+        // Manage KeyListener in Tauri state for hot-swapping
+        app.manage(listener);
     }
 
     // Initialize and start the updater
@@ -213,9 +224,9 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
     app.manage(updater.clone());
     updater::start_periodic_update_check(app.app_handle().clone(), updater);
 
-    // Only fix the Globe key setting when using Fn as the trigger
+    // Only fix the Globe key setting when using Fn in any shortcut
     // This prevents the emoji picker from appearing when using Fn for recording
-    if app_config.recording_trigger == config::RecordingTrigger::Fn {
+    if KeyListener::uses_fn_key(&shortcuts_config) {
         globe_key::fix_globe_key_if_needed();
     }
 

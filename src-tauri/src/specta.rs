@@ -1,4 +1,4 @@
-use crate::{models, recording, with_commands};
+use crate::{models, recording, shortcuts, with_commands};
 
 /// Setup Specta for type-safe TypeScript bindings and event emission
 ///
@@ -16,6 +16,8 @@ pub fn setup(app: &tauri::AppHandle) {
             // Model events (discriminated unions for state machine patterns)
             models::events::ModelDownloadStateChanged,
             models::events::ModelLoadingStateChanged,
+            // Shortcuts events
+            shortcuts::events::KeyCaptureEvent,
         ]);
 
     // Export TypeScript bindings in debug mode

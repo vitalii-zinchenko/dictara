@@ -9,6 +9,7 @@ mod log;
 mod models;
 mod recording;
 mod setup;
+mod shortcuts;
 mod specta;
 mod text_paster;
 mod ui;

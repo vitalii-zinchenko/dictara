@@ -1,0 +1,198 @@
+<mxfile host="65bd71144e">
+    <diagram name="Keyboard Shortcuts Architecture" id="arch">
+        <mxGraphModel dx="2357" dy="571" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="main-thread" value="Main Thread (Tauri Runtime)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;fontStyle=1;startSize=40;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="40" width="480" height="440" as="geometry"/>
+                </mxCell>
+                <mxCell id="config-store" value="ConfigStore&#xa;(config.rs)&#xa;&#xa;• Persistent storage&#xa;• get/set/delete methods&#xa;• Manages ShortcutsConfig" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;verticalAlign=top;spacingLeft=10;spacingTop=5;" parent="main-thread" vertex="1">
+                    <mxGeometry x="20" y="60" width="200" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="key-listener-ref" value="KeyListener&#xa;&#xa;• Managed in Tauri state&#xa;• Has update_shortcuts() method&#xa;• Sends config via channel" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;verticalAlign=top;spacingLeft=10;spacingTop=5;fontStyle=1" parent="main-thread" vertex="1">
+                    <mxGeometry x="250" y="60" width="210" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="state-manager" value="RecordingStateManager&#xa;&#xa;• is_recording_locked()&#xa;• Manages recording state" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;verticalAlign=top;spacingLeft=10;spacingTop=5;" parent="main-thread" vertex="1">
+                    <mxGeometry x="20" y="180" width="200" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="commands" value="Tauri Commands&#xa;(commands/preferences/shortcuts.rs)&#xa;&#xa;• load_shortcuts_config()&#xa;• save_shortcuts_config()&#xa;• reset_shortcuts_config()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=left;verticalAlign=top;spacingLeft=10;spacingTop=5;" parent="main-thread" vertex="1">
+                    <mxGeometry x="20" y="280" width="440" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="setup" value="setup.rs&#xa;• Initializes all components&#xa;• Runs migration&#xa;• Creates KeyListener with initial config&#xa;• Manages KeyListener in Tauri state" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;align=left;verticalAlign=top;spacingLeft=10;spacingTop=5;fontColor=#333333;" parent="main-thread" vertex="1">
+                    <mxGeometry x="250" y="180" width="210" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="keyboard-thread" value="Keyboard Listener Thread" style="swimlane;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=14;fontStyle=1;startSize=40;" parent="1" vertex="1">
+                    <mxGeometry x="560" y="40" width="380" height="440" as="geometry">
+                        <mxRectangle x="560" y="40" width="200" height="40" as="alternateBounds"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="key-listener" value="KeyListener&#xa;(keyboard_listener.rs)&#xa;&#xa;• shortcuts: ShortcutsConfig (cached!)&#xa;• config_rx: mpsc::Receiver&#xa;&#xa;Event Loop (rdev::grab)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;verticalAlign=top;spacingLeft=10;spacingTop=5;fontStyle=1" parent="keyboard-thread" vertex="1">
+                    <mxGeometry x="20" y="60" width="340" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="pressed-keys" value="pressed_keys&#xa;&#xa;HashSet&lt;u32&gt;&#xa;&#xa;• Tracks currently pressed keycodes&#xa;• Updated on KeyPress/KeyRelease" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;verticalAlign=top;spacingLeft=10;spacingTop=5;" parent="keyboard-thread" vertex="1">
+                    <mxGeometry x="20" y="190" width="340" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="event-logic" value="Event Handling&#xa;&#xa;1. Check config_rx.try_recv() for updates&#xa;2. Read local shortcuts variable (fast!)&#xa;3. Update pressed_keys HashSet&#xa;4. Match shortcuts using .matches()&#xa;5. Send RecordingCommand" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;verticalAlign=top;spacingLeft=10;spacingTop=5;" parent="keyboard-thread" vertex="1">
+                    <mxGeometry x="20" y="310" width="340" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="key-capture-thread" value="Key Capture Thread (Temporary)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=14;fontStyle=1;startSize=40;" parent="1" vertex="1">
+                    <mxGeometry x="980" y="360" width="300" height="220" as="geometry"/>
+                </mxCell>
+                <mxCell id="key-capture-listener" value="Temporary Keyboard Listener&#xa;(dictara_keyboard::grab)&#xa;&#xa;• Started by start_key_capture()&#xa;• Emits KeyCaptureEvent&#xa;• Stopped by stop_key_capture()&#xa;• Same keycodes as runtime listener!" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;verticalAlign=top;spacingLeft=10;spacingTop=5;fontStyle=1" parent="key-capture-thread" vertex="1">
+                    <mxGeometry x="20" y="60" width="260" height="140" as="geometry"/>
+                </mxCell>
+                <mxCell id="recording-thread" value="Recording Thread" style="swimlane;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;startSize=40;" parent="1" vertex="1">
+                    <mxGeometry x="980" y="40" width="300" height="280" as="geometry"/>
+                </mxCell>
+                <mxCell id="command-receiver" value="mpsc::Receiver&#xa;&lt;RecordingCommand&gt;&#xa;&#xa;Commands:&#xa;• StartRecording&#xa;• StopRecording&#xa;• LockRecording" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;verticalAlign=top;spacingLeft=10;spacingTop=5;" parent="recording-thread" vertex="1">
+                    <mxGeometry x="20" y="60" width="260" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="recording-handler" value="Recording Handler&#xa;&#xa;• Starts/stops audio capture&#xa;• Manages recording state&#xa;• Sends to transcription" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;verticalAlign=top;spacingLeft=10;spacingTop=5;" parent="recording-thread" vertex="1">
+                    <mxGeometry x="20" y="200" width="260" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="frontend-thread" value="Frontend Thread (React / WebView)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;fontStyle=1;startSize=40;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="520" width="900" height="340" as="geometry"/>
+                </mxCell>
+                <mxCell id="shortcuts-config-comp" value="ShortcutsConfig.tsx&#xa;&#xa;• TanStack Query hooks&#xa;• useQuery(loadShortcutsConfig)&#xa;• useMutation(saveShortcutsConfig)&#xa;• Auto-save on change" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=left;verticalAlign=top;spacingLeft=10;spacingTop=5;" parent="frontend-thread" vertex="1">
+                    <mxGeometry x="20" y="60" width="280" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="key-capture-hook" value="useKeyCapture.ts&#xa;&#xa;• Listens to KeyCaptureEvent stream&#xa;• Manages pressedKeys state&#xa;• Real-time key tracking" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;verticalAlign=top;spacingLeft=10;spacingTop=5;" parent="frontend-thread" vertex="1">
+                    <mxGeometry x="620" y="230" width="260" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="key-capture-comp" value="KeyCaptureInput.tsx&#xa;&#xa;• Uses useKeyCapture hook&#xa;• Shows key badges in real-time&#xa;• Max 3 keys enforcement&#xa;• Captures Fn key via backend!" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=left;verticalAlign=top;spacingLeft=10;spacingTop=5;" parent="frontend-thread" vertex="1">
+                    <mxGeometry x="20" y="200" width="280" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="hotkeys-page" value="Hotkeys.tsx&#xa;(Preferences Page)&#xa;&#xa;• Renders ShortcutsConfig&#xa;• No restart needed!" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=left;verticalAlign=top;spacingLeft=10;spacingTop=5;" parent="frontend-thread" vertex="1">
+                    <mxGeometry x="330" y="60" width="260" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="bindings" value="Tauri Bindings (bindings.ts)&#xa;Generated by tauri-specta&#xa;&#xa;• loadShortcutsConfig()&#xa;• saveShortcutsConfig()&#xa;• resetShortcutsConfig()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;verticalAlign=top;spacingLeft=10;spacingTop=5;" parent="frontend-thread" vertex="1">
+                    <mxGeometry x="330" y="180" width="260" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="data-structures" value="Data Structures (TypeScript)&#xa;&#xa;type ShortcutKey = { keycode: number, label: string }&#xa;type Shortcut = { keys: ShortcutKey[] }&#xa;type ShortcutsConfig = {&#xa;  pushToRecord: Shortcut&#xa;  handsFreeStart: Shortcut&#xa;  handsFreeStop: Shortcut&#xa;}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;verticalAlign=top;spacingLeft=10;spacingTop=5;fontFamily=Courier New;" parent="frontend-thread" vertex="1">
+                    <mxGeometry x="620" y="60" width="260" height="150" as="geometry"/>
+                </mxCell>
+                <mxCell id="arrow1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#666666;" parent="1" source="config-store" target="key-listener-ref" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="arrow1-label" value="Loads initial&#xa;config at startup" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=11;fontColor=#666666;backgroundColor=#ffffff;" parent="arrow1" vertex="1" connectable="0">
+                    <mxGeometry x="-0.1" y="1" relative="1" as="geometry">
+                        <mxPoint x="5" y="-10" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="arrow3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#d79b00;" parent="1" source="event-logic" target="command-receiver" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="950" y="395"/>
+                            <mxPoint x="950" y="160"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="arrow3-label" value="mpsc::Sender&#xa;&lt;RecordingCommand&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=11;fontColor=#d79b00;backgroundColor=#ffffff;fontStyle=1" parent="arrow3" vertex="1" connectable="0">
+                    <mxGeometry x="-0.1" y="1" relative="1" as="geometry">
+                        <mxPoint x="15" y="30" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="arrow4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#b85450;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" parent="1" source="bindings" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="500" y="900"/>
+                            <mxPoint x="20" y="900"/>
+                            <mxPoint x="20" y="490"/>
+                            <mxPoint x="240" y="490"/>
+                            <mxPoint x="240" y="420"/>
+                        </Array>
+                        <mxPoint x="240" y="420" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="arrow4-label" value="Tauri IPC&#xa;(invoke commands)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=11;fontColor=#b85450;backgroundColor=#ffffff;fontStyle=1" parent="arrow4" vertex="1" connectable="0">
+                    <mxGeometry x="-0.1" y="1" relative="1" as="geometry">
+                        <mxPoint x="-40" y="-8" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="arrow5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#9673a6;exitX=0.25;exitY=0;exitDx=0;exitDy=0;entryX=0.25;entryY=1;entryDx=0;entryDy=0;" parent="1" source="commands" target="config-store" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="arrow5-label" value="Persist&#xa;config" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=11;fontColor=#9673a6;backgroundColor=#ffffff;" parent="arrow5" vertex="1" connectable="0">
+                    <mxGeometry x="-0.1" y="1" relative="1" as="geometry">
+                        <mxPoint x="-15" y="5" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="arrow6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#d79b00;exitX=0.75;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" parent="1" source="commands" target="key-listener-ref" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="arrow6-label" value="Hot-swap via&#xa;update_shortcuts()" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=11;fontColor=#d79b00;backgroundColor=#ffffff;fontStyle=1" parent="arrow6" vertex="1" connectable="0">
+                    <mxGeometry x="-0.1" y="1" relative="1" as="geometry">
+                        <mxPoint x="15" y="5" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="arrow-channel" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#d79b00;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.25;entryDx=0;entryDy=0;dashed=1;dashPattern=8 8;" parent="1" source="key-listener-ref" target="key-listener" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="540" y="110"/>
+                            <mxPoint x="540" y="88"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="arrow-channel-label" value="mpsc::Sender&#xa;&lt;ShortcutsConfig&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=11;fontColor=#d79b00;backgroundColor=#ffffff;fontStyle=1" parent="arrow-channel" vertex="1" connectable="0">
+                    <mxGeometry x="-0.1" y="1" relative="1" as="geometry">
+                        <mxPoint y="-15" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="arrow7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#82b366;dashed=1;dashPattern=8 8;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.7;entryDx=0;entryDy=0;" parent="1" source="state-manager" target="event-logic" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="540" y="260"/>
+                            <mxPoint x="540" y="387"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="arrow7-label" value="Arc&lt;StateManager&gt;&#xa;(check locked state)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=11;fontColor=#82b366;backgroundColor=#ffffff;" parent="arrow7" vertex="1" connectable="0">
+                    <mxGeometry x="-0.1" y="1" relative="1" as="geometry">
+                        <mxPoint x="5" y="-40" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="legend" value="Legend" style="swimlane;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;fontStyle=1;startSize=30;fontColor=#333333;" parent="1" vertex="1">
+                    <mxGeometry x="980" y="620" width="300" height="240" as="geometry"/>
+                </mxCell>
+                <mxCell id="legend1" value="Shared State (Arc)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;strokeWidth=3;dashed=1;dashPattern=8 8;fontSize=11;" parent="legend" vertex="1">
+                    <mxGeometry x="20" y="45" width="260" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="legend2" value="Channel Communication" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d79b00;strokeWidth=3;fontSize=11;" parent="legend" vertex="1">
+                    <mxGeometry x="20" y="85" width="260" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="legend3" value="Tauri IPC (Frontend ↔ Backend)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;strokeWidth=3;fontSize=11;" parent="legend" vertex="1">
+                    <mxGeometry x="20" y="125" width="260" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="legend4" value="Config Storage" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;strokeWidth=2;fontSize=11;" parent="legend" vertex="1">
+                    <mxGeometry x="20" y="165" width="260" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="legend5" value="Data Flow" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;strokeWidth=2;fontSize=11;" parent="legend" vertex="1">
+                    <mxGeometry x="20" y="165" width="260" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="legend6" value="Event Stream (tauri-specta)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;strokeWidth=3;dashed=1;dashPattern=1 4;fontSize=11;" parent="legend" vertex="1">
+                    <mxGeometry x="20" y="205" width="260" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="arrow-capture-event" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#d6b656;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.75;entryDx=0;entryDy=0;dashed=1;dashPattern=1 4;" parent="1" source="key-capture-listener" target="key-capture-hook" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="960" y="490"/>
+                            <mxPoint x="960" y="818"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="arrow-capture-event-label" value="KeyCaptureEvent&#xa;stream (KeyDown/KeyUp)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=11;fontColor=#d6b656;backgroundColor=#ffffff;fontStyle=1" parent="arrow-capture-event" vertex="1" connectable="0">
+                    <mxGeometry x="-0.1" y="1" relative="1" as="geometry">
+                        <mxPoint x="15" y="-50" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="title" value="Keyboard Shortcuts System Architecture" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=20;fontStyle=1;fontColor=#000000;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="900" width="1240" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="notes" value="Key Architecture Points:&#xa;&#xa;1. KeyListener CACHES shortcuts config locally (no locks!) - reads via simple variable access&#xa;&#xa;2. Hot-swap via mpsc channel: save_shortcuts_config() -&gt; key_listener.update_shortcuts() -&gt; config_rx.send()&#xa;&#xa;3. Event loop checks config_rx.try_recv() on each event (non-blocking, ~5ns overhead)&#xa;&#xa;4. Frontend communicates via Tauri IPC - type-safe bindings generated by tauri-specta&#xa;&#xa;5. TWO channels: ShortcutsConfig updates (config_rx) and RecordingCommand (command_tx)&#xa;&#xa;6. Key Capture: Backend streams KeyCaptureEvent to frontend - NO keycode mismatch!&#xa;&#xa;7. SIMPLER than Arc&lt;RwLock&gt; approach - no separate ShortcutsState component needed!" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;verticalAlign=top;spacingLeft=10;spacingTop=5;fontSize=11;fontFamily=Helvetica;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="950" width="1240" height="180" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

@@ -29,12 +29,89 @@ pub enum RecordingTrigger {
 
 impl RecordingTrigger {
     /// Convert to the keyboard crate's Key type
+    #[allow(dead_code)]
     pub fn to_key(self) -> dictara_keyboard::Key {
         match self {
             RecordingTrigger::Fn => dictara_keyboard::Key::Function,
             RecordingTrigger::Control => dictara_keyboard::Key::ControlLeft,
             RecordingTrigger::Option => dictara_keyboard::Key::Alt,
             RecordingTrigger::Command => dictara_keyboard::Key::MetaLeft,
+        }
+    }
+}
+
+/// A single key in a shortcut combination
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ShortcutKey {
+    pub keycode: u32,
+    pub label: String,
+}
+
+/// A keyboard shortcut (1-3 keys)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct Shortcut {
+    pub keys: Vec<ShortcutKey>,
+}
+
+impl Shortcut {
+    /// Check if this shortcut matches currently pressed keys
+    pub fn matches(&self, pressed_keys: &std::collections::HashSet<u32>) -> bool {
+        // Exact match: same count AND all keys present
+        self.keys.len() == pressed_keys.len()
+            && self.keys.iter().all(|k| pressed_keys.contains(&k.keycode))
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        if self.keys.is_empty() || self.keys.len() > 3 {
+            return Err("Shortcut must have 1-3 keys".to_string());
+        }
+        // Check for duplicates
+        let mut seen = std::collections::HashSet::new();
+        for key in &self.keys {
+            if !seen.insert(key.keycode) {
+                return Err(format!("Duplicate key: {}", key.label));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Complete shortcuts configuration
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ShortcutsConfig {
+    /// Push-to-talk: Hold to record, release to stop
+    pub push_to_record: Shortcut,
+    /// Hands-free: Press to toggle (start/stop)
+    pub hands_free: Shortcut,
+}
+
+impl Default for ShortcutsConfig {
+    fn default() -> Self {
+        let fn_key = dictara_keyboard::Key::Function;
+        let space_key = dictara_keyboard::Key::Space;
+
+        Self {
+            push_to_record: Shortcut {
+                keys: vec![ShortcutKey {
+                    keycode: fn_key.to_macos_keycode(),
+                    label: fn_key.to_label(),
+                }],
+            },
+            hands_free: Shortcut {
+                keys: vec![
+                    ShortcutKey {
+                        keycode: fn_key.to_macos_keycode(),
+                        label: fn_key.to_label(),
+                    },
+                    ShortcutKey {
+                        keycode: space_key.to_macos_keycode(),
+                        label: space_key.to_label(),
+                    },
+                ],
+            },
         }
     }
 }
@@ -96,8 +173,8 @@ pub enum OnboardingStep {
     Microphone,
     #[serde(rename = "api_keys")]
     ApiKeys,
-    #[serde(rename = "trigger_key")]
-    TriggerKey,
+    #[serde(rename = "shortcuts")]
+    Shortcuts,
     #[serde(rename = "fn_hold")]
     FnHold,
     #[serde(rename = "fn_space")]
@@ -138,6 +215,11 @@ pub struct LocalModelConfig {
 impl ConfigKey<LocalModelConfig> {
     #[allow(dead_code)]
     pub const LOCAL_MODEL: Self = Self::new("localModelConfig");
+}
+
+impl ConfigKey<ShortcutsConfig> {
+    #[allow(dead_code)]
+    pub const SHORTCUTS: Self = Self::new("shortcutsConfig");
 }
 
 // ===== Keychain-stored Configurations (no keys) =====
@@ -196,6 +278,47 @@ impl ConfigStore for Config {
         self.store.save().map_err(|e| e.to_string())?;
         Ok(())
     }
+}
+
+/// Migrate from RecordingTrigger to ShortcutsConfig (run once on startup)
+pub fn migrate_trigger_to_shortcuts(store: &impl ConfigStore) -> Result<(), String> {
+    // Skip if already migrated
+    if store
+        .get(&ConfigKey::<ShortcutsConfig>::SHORTCUTS)
+        .is_some()
+    {
+        return Ok(());
+    }
+
+    // Load old trigger config
+    let app_config = store.get(&ConfigKey::APP).unwrap_or_default();
+
+    // Convert old trigger to key, then to keycode and label
+    let key = app_config.recording_trigger.to_key();
+    let trigger_key = ShortcutKey {
+        keycode: key.to_macos_keycode(),
+        label: key.to_label(),
+    };
+
+    // Create new shortcuts config preserving user's trigger choice
+    let space_key = dictara_keyboard::Key::Space;
+    let shortcuts = ShortcutsConfig {
+        push_to_record: Shortcut {
+            keys: vec![trigger_key.clone()],
+        },
+        hands_free: Shortcut {
+            keys: vec![
+                trigger_key,
+                ShortcutKey {
+                    keycode: space_key.to_macos_keycode(),
+                    label: space_key.to_label(),
+                },
+            ],
+        },
+    };
+
+    store.set(&ConfigKey::<ShortcutsConfig>::SHORTCUTS, shortcuts)?;
+    Ok(())
 }
 
 #[cfg(test)]

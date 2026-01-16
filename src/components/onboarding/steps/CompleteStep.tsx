@@ -1,15 +1,20 @@
 import { StepContainer } from '../StepContainer'
 import { useOnboardingNavigation } from '@/hooks/useOnboardingNavigation'
-import { useAppConfig } from '@/hooks/useAppConfig'
+import { useShortcutsConfig } from '@/hooks/useShortcutsConfig'
 import { CheckCircle2, Keyboard, Mic } from 'lucide-react'
-import { getTriggerDisplayName } from '../utils'
+
+function formatShortcutKeys(keys: Array<{ label: string }>): string {
+  return keys.map((k) => k.label).join(' + ')
+}
 
 export function CompleteStep() {
   const { finishOnboarding } = useOnboardingNavigation()
-  const { data: config } = useAppConfig()
+  const { data: shortcuts } = useShortcutsConfig()
 
-  const trigger = config?.recordingTrigger ?? 'fn'
-  const triggerName = getTriggerDisplayName(trigger)
+  const pushToRecordKeys = shortcuts?.pushToRecord.keys ?? []
+  const handsFreeKeys = shortcuts?.handsFree.keys ?? []
+  const pushToRecordLabel = formatShortcutKeys(pushToRecordKeys)
+  const handsFreeLabel = formatShortcutKeys(handsFreeKeys)
 
   const handleFinish = () => {
     finishOnboarding.mutate()
@@ -41,7 +46,7 @@ export function CompleteStep() {
             <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg text-left">
               <Keyboard className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
               <div>
-                <p className="text-sm font-medium">Hold {triggerName}</p>
+                <p className="text-sm font-medium">Hold {pushToRecordLabel}</p>
                 <p className="text-sm text-muted-foreground">
                   Hold to record, release to transcribe
                 </p>
@@ -51,7 +56,7 @@ export function CompleteStep() {
             <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg text-left">
               <Mic className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
               <div>
-                <p className="text-sm font-medium">{triggerName} + Space</p>
+                <p className="text-sm font-medium">{handsFreeLabel}</p>
                 <p className="text-sm text-muted-foreground">Toggle mode: tap to start/stop</p>
               </div>
             </div>

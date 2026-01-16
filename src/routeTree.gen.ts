@@ -20,7 +20,7 @@ import { Route as PreferencesHotkeysRouteImport } from './routes/preferences/hot
 import { Route as PreferencesApiKeysRouteImport } from './routes/preferences/api-keys'
 import { Route as PreferencesAboutRouteImport } from './routes/preferences/about'
 import { Route as OnboardingWelcomeRouteImport } from './routes/onboarding/welcome'
-import { Route as OnboardingTriggerKeyRouteImport } from './routes/onboarding/trigger-key'
+import { Route as OnboardingShortcutsRouteImport } from './routes/onboarding/shortcuts'
 import { Route as OnboardingMicrophoneRouteImport } from './routes/onboarding/microphone'
 import { Route as OnboardingFnSpaceRouteImport } from './routes/onboarding/fn-space'
 import { Route as OnboardingFnHoldRouteImport } from './routes/onboarding/fn-hold'
@@ -83,9 +83,9 @@ const OnboardingWelcomeRoute = OnboardingWelcomeRouteImport.update({
   path: '/welcome',
   getParentRoute: () => OnboardingRouteRoute,
 } as any)
-const OnboardingTriggerKeyRoute = OnboardingTriggerKeyRouteImport.update({
-  id: '/trigger-key',
-  path: '/trigger-key',
+const OnboardingShortcutsRoute = OnboardingShortcutsRouteImport.update({
+  id: '/shortcuts',
+  path: '/shortcuts',
   getParentRoute: () => OnboardingRouteRoute,
 } as any)
 const OnboardingMicrophoneRoute = OnboardingMicrophoneRouteImport.update({
@@ -129,7 +129,7 @@ export interface FileRoutesByFullPath {
   '/onboarding/fn-hold': typeof OnboardingFnHoldRoute
   '/onboarding/fn-space': typeof OnboardingFnSpaceRoute
   '/onboarding/microphone': typeof OnboardingMicrophoneRoute
-  '/onboarding/trigger-key': typeof OnboardingTriggerKeyRoute
+  '/onboarding/shortcuts': typeof OnboardingShortcutsRoute
   '/onboarding/welcome': typeof OnboardingWelcomeRoute
   '/preferences/about': typeof PreferencesAboutRoute
   '/preferences/api-keys': typeof PreferencesApiKeysRoute
@@ -146,7 +146,7 @@ export interface FileRoutesByTo {
   '/onboarding/fn-hold': typeof OnboardingFnHoldRoute
   '/onboarding/fn-space': typeof OnboardingFnSpaceRoute
   '/onboarding/microphone': typeof OnboardingMicrophoneRoute
-  '/onboarding/trigger-key': typeof OnboardingTriggerKeyRoute
+  '/onboarding/shortcuts': typeof OnboardingShortcutsRoute
   '/onboarding/welcome': typeof OnboardingWelcomeRoute
   '/preferences/about': typeof PreferencesAboutRoute
   '/preferences/api-keys': typeof PreferencesApiKeysRoute
@@ -167,7 +167,7 @@ export interface FileRoutesById {
   '/onboarding/fn-hold': typeof OnboardingFnHoldRoute
   '/onboarding/fn-space': typeof OnboardingFnSpaceRoute
   '/onboarding/microphone': typeof OnboardingMicrophoneRoute
-  '/onboarding/trigger-key': typeof OnboardingTriggerKeyRoute
+  '/onboarding/shortcuts': typeof OnboardingShortcutsRoute
   '/onboarding/welcome': typeof OnboardingWelcomeRoute
   '/preferences/about': typeof PreferencesAboutRoute
   '/preferences/api-keys': typeof PreferencesApiKeysRoute
@@ -189,7 +189,7 @@ export interface FileRouteTypes {
     | '/onboarding/fn-hold'
     | '/onboarding/fn-space'
     | '/onboarding/microphone'
-    | '/onboarding/trigger-key'
+    | '/onboarding/shortcuts'
     | '/onboarding/welcome'
     | '/preferences/about'
     | '/preferences/api-keys'
@@ -206,7 +206,7 @@ export interface FileRouteTypes {
     | '/onboarding/fn-hold'
     | '/onboarding/fn-space'
     | '/onboarding/microphone'
-    | '/onboarding/trigger-key'
+    | '/onboarding/shortcuts'
     | '/onboarding/welcome'
     | '/preferences/about'
     | '/preferences/api-keys'
@@ -226,7 +226,7 @@ export interface FileRouteTypes {
     | '/onboarding/fn-hold'
     | '/onboarding/fn-space'
     | '/onboarding/microphone'
-    | '/onboarding/trigger-key'
+    | '/onboarding/shortcuts'
     | '/onboarding/welcome'
     | '/preferences/about'
     | '/preferences/api-keys'
@@ -322,11 +322,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OnboardingWelcomeRouteImport
       parentRoute: typeof OnboardingRouteRoute
     }
-    '/onboarding/trigger-key': {
-      id: '/onboarding/trigger-key'
-      path: '/trigger-key'
-      fullPath: '/onboarding/trigger-key'
-      preLoaderRoute: typeof OnboardingTriggerKeyRouteImport
+    '/onboarding/shortcuts': {
+      id: '/onboarding/shortcuts'
+      path: '/shortcuts'
+      fullPath: '/onboarding/shortcuts'
+      preLoaderRoute: typeof OnboardingShortcutsRouteImport
       parentRoute: typeof OnboardingRouteRoute
     }
     '/onboarding/microphone': {
@@ -381,7 +381,7 @@ interface OnboardingRouteRouteChildren {
   OnboardingFnHoldRoute: typeof OnboardingFnHoldRoute
   OnboardingFnSpaceRoute: typeof OnboardingFnSpaceRoute
   OnboardingMicrophoneRoute: typeof OnboardingMicrophoneRoute
-  OnboardingTriggerKeyRoute: typeof OnboardingTriggerKeyRoute
+  OnboardingShortcutsRoute: typeof OnboardingShortcutsRoute
   OnboardingWelcomeRoute: typeof OnboardingWelcomeRoute
   OnboardingIndexRoute: typeof OnboardingIndexRoute
 }
@@ -393,7 +393,7 @@ const OnboardingRouteRouteChildren: OnboardingRouteRouteChildren = {
   OnboardingFnHoldRoute: OnboardingFnHoldRoute,
   OnboardingFnSpaceRoute: OnboardingFnSpaceRoute,
   OnboardingMicrophoneRoute: OnboardingMicrophoneRoute,
-  OnboardingTriggerKeyRoute: OnboardingTriggerKeyRoute,
+  OnboardingShortcutsRoute: OnboardingShortcutsRoute,
   OnboardingWelcomeRoute: OnboardingWelcomeRoute,
   OnboardingIndexRoute: OnboardingIndexRoute,
 }

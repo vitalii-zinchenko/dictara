@@ -112,6 +112,7 @@ impl RecordingStateManager {
 
     /// Check if currently in Recording state (not locked)
     /// Used to determine when to swallow the Space key for lock transition
+    #[allow(dead_code)]
     pub fn is_recording(&self) -> bool {
         self.current() == RecordingState::Recording
     }

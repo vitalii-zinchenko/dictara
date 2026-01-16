@@ -4,6 +4,8 @@
 
 This plan evolves the existing simple trigger key feature into a comprehensive 3-shortcut system with key combinations, runtime hot-swapping, and interactive key capture UI.
 
+**Architecture Approach:** Uses a simple **mpsc channel-based** hot-swap mechanism instead of `Arc<RwLock<>>` for better performance and simpler code. KeyListener caches shortcuts locally and checks for updates via non-blocking `try_recv()` on each event.
+
 **Current State (Already Implemented):**
 - Simple `RecordingTrigger` enum (Fn/Control/Option/Command) in [config.rs:19-40](/Users/vitaliizinchenko/Projects/dictara/src-tauri/src/config.rs#L19-L40)
 - Type-safe `ConfigStore` pattern with get/set/delete methods in [config.rs:160-199](/Users/vitaliizinchenko/Projects/dictara/src-tauri/src/config.rs#L160-L199)
@@ -159,93 +161,68 @@ pub fn migrate_trigger_to_shortcuts(store: &impl ConfigStore) -> Result<(), Stri
 }
 ```
 
-### Thread-Safe Hot-Swap State
+### Channel-Based Hot-Swap Architecture
 
-Create new file: `src-tauri/src/shortcuts_state.rs`
+**No separate state component needed!** KeyListener caches config locally and receives updates via mpsc channel.
 
-```rust
-use crate::config::ShortcutsConfig;
-use std::sync::{Arc, RwLock};
-
-/// Thread-safe runtime shortcuts state for hot-swapping
-#[derive(Debug, Clone)]
-pub struct ShortcutsState {
-    inner: Arc<RwLock<ShortcutsConfig>>,
-}
-
-impl ShortcutsState {
-    pub fn new(config: ShortcutsConfig) -> Self {
-        Self {
-            inner: Arc::new(RwLock::new(config)),
-        }
-    }
-
-    /// Read current shortcuts (many readers allowed)
-    pub fn get(&self) -> ShortcutsConfig {
-        self.inner.read().unwrap().clone()
-    }
-
-    /// Update shortcuts (exclusive write access)
-    pub fn update(&self, new_config: ShortcutsConfig) -> ShortcutsConfig {
-        let mut guard = self.inner.write().unwrap();
-        let old = guard.clone();
-        *guard = new_config;
-        old
-    }
-
-    /// Check if any shortcut uses Fn key (for globe key fix)
-    pub fn uses_fn_key(&self) -> bool {
-        let config = self.get();
-        let fn_code = 63u32;
-
-        config.push_to_record.keys.iter().any(|k| k.keycode == fn_code)
-            || config.hands_free_start.keys.iter().any(|k| k.keycode == fn_code)
-            || config.hands_free_stop.keys.iter().any(|k| k.keycode == fn_code)
-    }
-}
-```
+**Why this is simpler:**
+- No `Arc<RwLock<>>` overhead
+- No separate ShortcutsState file/module
+- Faster: local variable read vs RwLock read
+- More idiomatic Rust for thread communication
 
 ### Updated Keyboard Listener
 
 Modify [keyboard_listener.rs](/Users/vitaliizinchenko/Projects/dictara/src-tauri/src/keyboard_listener.rs):
 
 **Key Changes:**
-1. Replace `recording_trigger: Key` parameter with `shortcuts_state: Arc<ShortcutsState>`
-2. Track pressed keys in a `HashSet<u32>` for combination matching
-3. Load shortcuts via `shortcuts_state.get()` on each event (hot-swap safe)
-4. Match shortcuts using `shortcut.matches(&pressed_keys)`
-5. Remove hardcoded LOCK_MODIFIER constant
+1. Replace `recording_trigger: Key` parameter with `initial_config: ShortcutsConfig`
+2. Create mpsc channel for config updates: `(config_tx, config_rx)`
+3. **Cache shortcuts locally** in the spawned thread (no locks!)
+4. Check `config_rx.try_recv()` on each event to hot-swap config
+5. Track pressed keys in a `HashSet<u32>` for combination matching
+6. Match shortcuts using `shortcut.matches(&pressed_keys)`
+7. Remove hardcoded LOCK_MODIFIER constant
+8. Store `config_tx` in KeyListener struct for `update_shortcuts()` method
 
 ```rust
-use crate::shortcuts_state::ShortcutsState;
+use crate::config::ShortcutsConfig;
 use std::collections::HashSet;
+use tokio::sync::mpsc;
 
 pub struct KeyListener {
     _thread_handle: Option<JoinHandle<()>>,
+    config_tx: mpsc::Sender<ShortcutsConfig>, // Send config updates to thread
 }
 
 impl KeyListener {
     pub fn start(
         command_tx: mpsc::Sender<RecordingCommand>,
         state_manager: Arc<RecordingStateManager>,
-        shortcuts_state: Arc<ShortcutsState>,
+        initial_config: ShortcutsConfig,
     ) -> Self {
+        let (config_tx, mut config_rx) = mpsc::channel(10);
+
         let thread_handle = thread::spawn(move || {
+            // CACHE shortcuts locally - NO LOCKS!
+            let mut shortcuts = initial_config;
             let mut pressed_keys: HashSet<u32> = HashSet::new();
 
             if let Err(err) = grab(move |event| {
-                // Get current shortcuts (hot-swap safe)
-                let shortcuts = shortcuts_state.get();
+                // Check for config updates (non-blocking, ~5ns overhead)
+                if let Ok(new_config) = config_rx.try_recv() {
+                    shortcuts = new_config; // Hot-swap!
+                }
 
                 match event.event_type {
                     EventType::KeyPress(key) => {
                         let keycode = key.to_macos_keycode();
                         pressed_keys.insert(keycode);
 
-                        // Check shortcuts
+                        // Check shortcuts (reads LOCAL variable - fast!)
                         if shortcuts.push_to_record.matches(&pressed_keys) {
                             let _ = command_tx.blocking_send(RecordingCommand::StartRecording);
-                            return Some(event); // Pass through (globe key fix handles Fn)
+                            return Some(event);
                         }
 
                         if shortcuts.hands_free_start.matches(&pressed_keys) {
@@ -289,7 +266,22 @@ impl KeyListener {
 
         Self {
             _thread_handle: Some(thread_handle),
+            config_tx,
         }
+    }
+
+    /// Update shortcuts at runtime (no restart needed!)
+    pub fn update_shortcuts(&self, new_config: ShortcutsConfig) -> Result<(), String> {
+        self.config_tx.blocking_send(new_config)
+            .map_err(|_| "KeyListener thread is not running".to_string())
+    }
+
+    /// Check if any shortcut uses Fn key (for globe key fix)
+    pub fn uses_fn_key(config: &ShortcutsConfig) -> bool {
+        let fn_code = 63u32;
+        config.push_to_record.keys.iter().any(|k| k.keycode == fn_code)
+            || config.hands_free_start.keys.iter().any(|k| k.keycode == fn_code)
+            || config.hands_free_stop.keys.iter().any(|k| k.keycode == fn_code)
     }
 }
 ```
@@ -302,8 +294,24 @@ Create new file: `src-tauri/src/commands/preferences/shortcuts.rs`
 
 ```rust
 use crate::config::{ConfigKey, ConfigStore, ShortcutsConfig};
-use crate::shortcuts_state::ShortcutsState;
-use tauri::State;
+use crate::keyboard_listener::KeyListener;
+use crate::shortcuts::events::KeyCaptureEvent;
+use tauri::{AppHandle, State};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
+/// Global state to control key capture listener
+pub struct KeyCaptureState {
+    is_capturing: Arc<Mutex<bool>>,
+}
+
+impl KeyCaptureState {
+    pub fn new() -> Self {
+        Self {
+            is_capturing: Arc::new(Mutex::new(false)),
+        }
+    }
+}
 
 #[tauri::command]
 #[specta::specta]
@@ -317,7 +325,7 @@ pub fn load_shortcuts_config(
 #[specta::specta]
 pub fn save_shortcuts_config(
     config_store: State<config::Config>,
-    shortcuts_state: State<ShortcutsState>,
+    key_listener: State<KeyListener>,
     config: ShortcutsConfig,
 ) -> Result<(), String> {
     // Validate all shortcuts
@@ -325,18 +333,19 @@ pub fn save_shortcuts_config(
     config.hands_free_start.validate()?;
     config.hands_free_stop.validate()?;
 
+    // Load old config for Fn key change detection
+    let old_config = config_store.get(&ConfigKey::SHORTCUTS).unwrap_or_default();
+    let old_uses_fn = KeyListener::uses_fn_key(&old_config);
+    let new_uses_fn = KeyListener::uses_fn_key(&config);
+
     // Save to persistent storage
     config_store.set(&ConfigKey::SHORTCUTS, config.clone())?;
 
-    // Hot-swap runtime state (NO RESTART NEEDED!)
-    let old_config = shortcuts_state.update(config.clone());
+    // Hot-swap runtime config via channel (NO RESTART NEEDED!)
+    key_listener.update_shortcuts(config)?;
 
     // Update globe key fix if Fn usage changed
-    let old_uses_fn = old_config.push_to_record.keys.iter().any(|k| k.keycode == 63)
-        || old_config.hands_free_start.keys.iter().any(|k| k.keycode == 63);
-    let new_uses_fn = shortcuts_state.uses_fn_key();
-
-    if old_uses_fn != new_uses_fn && new_uses_fn {
+    if !old_uses_fn && new_uses_fn {
         crate::globe_key::fix_globe_key_if_needed();
     }
 
@@ -347,18 +356,81 @@ pub fn save_shortcuts_config(
 #[specta::specta]
 pub fn reset_shortcuts_config(
     config_store: State<config::Config>,
-    shortcuts_state: State<ShortcutsState>,
+    key_listener: State<KeyListener>,
 ) -> Result<ShortcutsConfig, String> {
     let defaults = ShortcutsConfig::default();
     config_store.set(&ConfigKey::SHORTCUTS, defaults.clone())?;
-    shortcuts_state.update(defaults.clone());
+    key_listener.update_shortcuts(defaults.clone())?;
     Ok(defaults)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn start_key_capture(
+    app_handle: AppHandle,
+    capture_state: State<'_, KeyCaptureState>,
+) -> Result<(), String> {
+    let mut is_capturing = capture_state.is_capturing.lock().await;
+
+    if *is_capturing {
+        return Err("Key capture already in progress".to_string());
+    }
+
+    *is_capturing = true;
+    let is_capturing_clone = capture_state.is_capturing.clone();
+
+    // Spawn keyboard listener in separate thread
+    std::thread::spawn(move || {
+        use dictara_keyboard::{grab, EventType};
+
+        let _ = grab(move |event| {
+            // Check if still capturing
+            let should_continue = *is_capturing_clone.blocking_lock();
+            if !should_continue {
+                return None; // Stop grabbing
+            }
+
+            match event.event_type {
+                EventType::KeyPress(key) => {
+                    let keycode = key.to_macos_keycode();
+                    let label = key.to_label();
+
+                    let _ = KeyCaptureEvent::KeyDown { keycode, label }
+                        .emit(&app_handle);
+                }
+                EventType::KeyRelease(key) => {
+                    let keycode = key.to_macos_keycode();
+                    let label = key.to_label();
+
+                    let _ = KeyCaptureEvent::KeyUp { keycode, label }
+                        .emit(&app_handle);
+                }
+                _ => {}
+            }
+
+            // Don't swallow keys during capture (user can see what they're typing)
+            Some(event)
+        });
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn stop_key_capture(
+    capture_state: State<'_, KeyCaptureState>,
+) -> Result<(), String> {
+    let mut is_capturing = capture_state.is_capturing.lock().await;
+    *is_capturing = false;
+    Ok(())
 }
 ```
 
 Register in:
 - `src-tauri/src/commands/mod.rs`: add `pub mod shortcuts;`
-- `src-tauri/src/commands/registry.rs`: add commands to the list
+- `src-tauri/src/commands/registry.rs`: add all 5 commands to the list
+- `src-tauri/src/setup.rs`: add `app.manage(KeyCaptureState::new());`
 
 ### App Setup Integration
 
@@ -373,80 +445,260 @@ let shortcuts_config = config_store
     .get(&ConfigKey::<ShortcutsConfig>::SHORTCUTS)
     .unwrap_or_default();
 
-// Create thread-safe shortcuts state
-let shortcuts_state = Arc::new(ShortcutsState::new(shortcuts_config.clone()));
-app.manage(shortcuts_state.clone());
-
 // Replace lines 204-206 (KeyListener initialization):
 if has_accessibility {
-    let _listener = KeyListener::start(
+    let listener = KeyListener::start(
         command_tx,
         state_manager.clone(),
-        shortcuts_state.clone(), // Pass shortcuts state instead of single trigger
+        shortcuts_config.clone(), // Pass initial config (cached in thread!)
     );
+
+    // Manage KeyListener in Tauri state for hot-swapping
+    app.manage(listener);
 }
 
 // Update lines 216-220 (globe key fix):
-if shortcuts_state.uses_fn_key() {
+if KeyListener::uses_fn_key(&shortcuts_config) {
     globe_key::fix_globe_key_if_needed();
 }
 ```
 
-Add to `src-tauri/src/lib.rs`:
-```rust
-pub mod shortcuts_state;
-```
+**No need to modify `src-tauri/src/lib.rs`** - no separate shortcuts_state module!
 
 ---
 
 ## Frontend Implementation
 
-### Key Capture Component
+### Key Capture Architecture: Backend-Streamed Events
 
-Create `src/components/shortcuts/KeyCaptureInput.tsx`:
+**Critical Design Decision:** JavaScript keycode mismatches with macOS keycodes used by Rust!
+- JavaScript `event.keyCode`: Virtual key codes (e.g., Space = 32, A = 65)
+- macOS keycodes (rdev): Hardware scan codes (e.g., Space = 49, A = 0)
+- **Solution:** Backend captures keys and streams events to frontend
 
-**Features:**
-- Captures keyboard events when in "capture mode"
-- Displays current keys as badges with remove buttons
-- Special "Use Fn" button (Fn key can't be captured by JavaScript)
-- Max 3 keys enforcement
-- Clear all button
+**Architecture:**
+1. Frontend clicks "Capture Keys" → calls `start_key_capture()` command
+2. Backend spawns temporary keyboard listener using `dictara_keyboard`
+3. Backend emits `KeyCaptureEvent` (KeyDown/KeyUp) with correct macOS keycodes
+4. Frontend listens to event stream, updates UI in real-time
+5. User clicks "Done" → calls `stop_key_capture()` command
+6. Frontend saves captured keys with matching keycodes
 
-**Key Implementation Details:**
+**Benefits:**
+- ✅ No keycode mismatch (Rust captures same codes it uses for listening)
+- ✅ Can capture Fn key (backend has OS-level access)
+- ✅ Real-time visual feedback as keys are pressed
+- ✅ Consistent with existing tauri-specta event pattern
+- ✅ Order preserved in array
+
+### Key Capture Events
+
+Add to `src-tauri/src/shortcuts/events.rs` (new file):
+
+```rust
+use serde::{Deserialize, Serialize};
+
+/// Key capture event - streamed to frontend during shortcut configuration
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum KeyCaptureEvent {
+    /// Key was pressed
+    #[serde(rename = "keyDown")]
+    KeyDown {
+        keycode: u32,
+        label: String,
+    },
+    /// Key was released
+    #[serde(rename = "keyUp")]
+    KeyUp {
+        keycode: u32,
+        label: String,
+    },
+}
+```
+
+Register in `src-tauri/src/lib.rs`:
+```rust
+mod shortcuts {
+    pub mod events;
+}
+```
+
+Add to tauri-specta builder in `src-tauri/src/lib.rs`:
+```rust
+.event::<shortcuts::events::KeyCaptureEvent>()
+```
+
+### Frontend: Key Capture Hook
+
+Create `src/hooks/useKeyCapture.ts`:
+
 ```tsx
-const handleKeyDown = (e: KeyboardEvent) => {
-  e.preventDefault()
-  e.stopPropagation()
+import { useEffect, useState, useCallback } from 'react'
+import { events, commands } from '@/bindings'
 
-  const keycode = e.keyCode || e.which
-  const label = getKeyLabel(e.key, e)
-
-  const shortcutKey: ShortcutKey = { keycode, label }
-
-  if (value.length < 3 && !value.some(k => k.keycode === keycode)) {
-    onChange([...value, shortcutKey])
-  }
+export interface CapturedKey {
+  keycode: number
+  label: string
 }
 
-const handleUseFn = () => {
-  const fnKey: ShortcutKey = { keycode: 63, label: 'Fn' }
-  if (value.length < 3 && !value.some(k => k.keycode === 63)) {
-    onChange([...value, fnKey])
+export function useKeyCapture() {
+  const [isCapturing, setIsCapturing] = useState(false)
+  const [pressedKeys, setPressedKeys] = useState<CapturedKey[]>([])
+
+  const startCapture = useCallback(async () => {
+    setPressedKeys([])
+    setIsCapturing(true)
+    await commands.startKeyCapture()
+  }, [])
+
+  const stopCapture = useCallback(async () => {
+    setIsCapturing(false)
+    await commands.stopKeyCapture()
+  }, [])
+
+  const clearKeys = useCallback(() => {
+    setPressedKeys([])
+  }, [])
+
+  // Listen to key events from backend
+  useEffect(() => {
+    if (!isCapturing) return
+
+    const setupListener = async () => {
+      const unlisten = await events.keyCaptureEvent.listen((event) => {
+        const payload = event.payload
+
+        if (payload.type === 'keyDown') {
+          setPressedKeys((prev) => {
+            // Avoid duplicates
+            if (prev.some(k => k.keycode === payload.keycode)) {
+              return prev
+            }
+            // Max 3 keys
+            if (prev.length >= 3) {
+              return prev
+            }
+            return [...prev, { keycode: payload.keycode, label: payload.label }]
+          })
+        } else if (payload.type === 'keyUp') {
+          setPressedKeys((prev) =>
+            prev.filter(k => k.keycode !== payload.keycode)
+          )
+        }
+      })
+
+      return unlisten
+    }
+
+    let cleanup: (() => void) | undefined
+    setupListener().then((cleanupFn) => {
+      cleanup = cleanupFn
+    })
+
+    return () => {
+      if (cleanup) cleanup()
+    }
+  }, [isCapturing])
+
+  return {
+    isCapturing,
+    pressedKeys,
+    startCapture,
+    stopCapture,
+    clearKeys,
   }
 }
 ```
 
-**Key Label Mapping:**
+### Frontend: Key Capture Component
+
+Create `src/components/shortcuts/KeyCaptureInput.tsx`:
+
+**Features:**
+- Uses `useKeyCapture` hook to receive backend events
+- Displays current keys as badges with remove buttons
+- Captures ALL keys including Fn (via backend!)
+- Max 3 keys enforcement
+- Real-time visual feedback
+
 ```tsx
-const labelMap: Record<string, string> = {
-  ' ': 'Space',
-  'Control': 'Control',
-  'Alt': 'Option',
-  'Meta': 'Command',
-  'Shift': 'Shift',
-  'Enter': 'Return',
-  'Escape': 'Esc',
-  // Map all common keys
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { useKeyCapture } from '@/hooks/useKeyCapture'
+import { X } from 'lucide-react'
+
+interface KeyCaptureInputProps {
+  value: CapturedKey[]
+  onChange: (keys: CapturedKey[]) => void
+  label: string
+}
+
+export function KeyCaptureInput({ value, onChange, label }: KeyCaptureInputProps) {
+  const { isCapturing, pressedKeys, startCapture, stopCapture } = useKeyCapture()
+
+  const handleStartCapture = () => {
+    startCapture()
+  }
+
+  const handleDone = () => {
+    stopCapture()
+    onChange(pressedKeys)
+  }
+
+  const handleCancel = () => {
+    stopCapture()
+    // Don't update value
+  }
+
+  const handleRemoveKey = (keycode: number) => {
+    onChange(value.filter(k => k.keycode !== keycode))
+  }
+
+  return (
+    <div className="space-y-2">
+      <label className="text-sm font-medium">{label}</label>
+
+      <div className="flex items-center gap-2 flex-wrap min-h-[40px] border rounded-md p-2">
+        {(isCapturing ? pressedKeys : value).map((key) => (
+          <Badge key={key.keycode} variant="secondary" className="gap-1">
+            {key.label}
+            {!isCapturing && (
+              <X
+                className="h-3 w-3 cursor-pointer"
+                onClick={() => handleRemoveKey(key.keycode)}
+              />
+            )}
+          </Badge>
+        ))}
+
+        {!isCapturing && value.length === 0 && (
+          <span className="text-sm text-muted-foreground">No keys assigned</span>
+        )}
+      </div>
+
+      {isCapturing ? (
+        <div className="flex gap-2">
+          <Button onClick={handleDone} size="sm">Done</Button>
+          <Button onClick={handleCancel} size="sm" variant="outline">Cancel</Button>
+          <span className="text-sm text-muted-foreground self-center">
+            Press keys... ({pressedKeys.length}/3)
+          </span>
+        </div>
+      ) : (
+        <div className="flex gap-2">
+          <Button onClick={handleStartCapture} size="sm" variant="outline">
+            {value.length > 0 ? 'Change Keys' : 'Capture Keys'}
+          </Button>
+          {value.length > 0 && (
+            <Button onClick={() => onChange([])} size="sm" variant="ghost">
+              Clear
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 ```
 
@@ -524,13 +776,14 @@ Remove the old restart logic - hot-swap makes it unnecessary!
 
 | File | Purpose |
 |------|---------|
-| `src-tauri/src/shortcuts_state.rs` | Thread-safe shortcuts runtime state with RwLock |
-| `src-tauri/src/commands/preferences/shortcuts.rs` | Load/save/reset shortcuts commands |
-| `src/components/shortcuts/KeyCaptureInput.tsx` | Interactive key capture component with Fn button |
+| `src-tauri/src/shortcuts/events.rs` | KeyCaptureEvent enum for streaming key events to frontend |
+| `src-tauri/src/commands/preferences/shortcuts.rs` | Load/save/reset shortcuts + start/stop key capture commands |
+| `src/hooks/useKeyCapture.ts` | Hook to listen to KeyCaptureEvent stream from backend |
+| `src/components/shortcuts/KeyCaptureInput.tsx` | Interactive key capture component using useKeyCapture hook |
 | `src/components/preferences/ShortcutsConfig.tsx` | Shortcuts configuration UI (3 sections) |
 | `src/components/onboarding/steps/ShortcutsStep.tsx` | Onboarding step for shortcuts (optional, see above) |
 | `src/routes/onboarding/shortcuts.tsx` | Route for shortcuts onboarding step |
-| `crates/keyboard/src/key.rs` (add method) | Add `to_macos_keycode()` method to Key enum |
+| `crates/keyboard/src/key.rs` (add methods) | Add `to_macos_keycode()` and `to_label()` methods to Key enum |
 
 ---
 
@@ -539,14 +792,15 @@ Remove the old restart logic - hot-swap makes it unnecessary!
 | File | Changes |
 |------|---------|
 | [config.rs](/Users/vitaliizinchenko/Projects/dictara/src-tauri/src/config.rs) | Add ShortcutKey, Shortcut, ShortcutsConfig structs; add migration function |
-| [keyboard_listener.rs](/Users/vitaliizinchenko/Projects/dictara/src-tauri/src/keyboard_listener.rs) | Replace single trigger with ShortcutsState; track pressed keys HashSet; match combinations |
-| [setup.rs](/Users/vitaliizinchenko/Projects/dictara/src-tauri/src/setup.rs) | Call migration; create ShortcutsState; pass to KeyListener; update globe key fix |
-| [lib.rs](/Users/vitaliizinchenko/Projects/dictara/src-tauri/src/lib.rs) | Add `pub mod shortcuts_state;` |
+| [keyboard_listener.rs](/Users/vitaliizinchenko/Projects/dictara/src-tauri/src/keyboard_listener.rs) | Add config_tx field; cache shortcuts locally; check config_rx.try_recv(); add update_shortcuts() method; track pressed keys HashSet |
+| [setup.rs](/Users/vitaliizinchenko/Projects/dictara/src-tauri/src/setup.rs) | Call migration; pass initial config to KeyListener; manage KeyListener in Tauri state; update globe key fix |
 | [commands/mod.rs](/Users/vitaliizinchenko/Projects/dictara/src-tauri/src/commands/mod.rs) | Add `pub mod shortcuts;` |
-| [commands/registry.rs](/Users/vitaliizinchenko/Projects/dictara/src-tauri/src/commands/registry.rs) | Register shortcuts commands |
+| [commands/registry.rs](/Users/vitaliizinchenko/Projects/dictara/src-tauri/src/commands/registry.rs) | Register 5 shortcuts commands (load, save, reset, start_capture, stop_capture) |
+| [lib.rs](/Users/vitaliizinchenko/Projects/dictara/src-tauri/src/lib.rs) | Add `mod shortcuts` and register KeyCaptureEvent in tauri-specta builder |
+| [setup.rs](/Users/vitaliizinchenko/Projects/dictara/src-tauri/src/setup.rs) | Add `app.manage(KeyCaptureState::new());` |
 | [Hotkeys.tsx](/Users/vitaliizinchenko/Projects/dictara/src/components/preferences/Hotkeys.tsx) | Replace with ShortcutsConfiguration component; remove restart logic |
 | [TriggerKeyStep.tsx](/Users/vitaliizinchenko/Projects/dictara/src/components/onboarding/steps/TriggerKeyStep.tsx) | Rename to ShortcutsStep and use ShortcutsConfiguration |
-| `crates/keyboard/src/key.rs` | Add `pub fn to_macos_keycode(&self) -> u32` method |
+| `crates/keyboard/src/key.rs` | Add `pub fn to_macos_keycode(&self) -> u32` and `pub fn to_label(&self) -> String` methods |
 | [config.rs](/Users/vitaliizinchenko/Projects/dictara/src-tauri/src/config.rs) OnboardingStep | Change `TriggerKey` to `Shortcuts` (or keep both for migration) |
 
 ---
@@ -557,25 +811,29 @@ Remove the old restart logic - hot-swap makes it unnecessary!
 1. Add `ShortcutKey`, `Shortcut`, `ShortcutsConfig` to `config.rs`
 2. Add `ConfigKey::SHORTCUTS` constant
 3. Add migration function `migrate_trigger_to_shortcuts()`
-4. Create `shortcuts_state.rs` with `ShortcutsState`
-5. Add `to_macos_keycode()` to `dictara_keyboard::Key`
-6. **Keep old RecordingTrigger** for now (backward compatibility)
+4. Add `to_macos_keycode()` to `dictara_keyboard::Key`
+5. **Keep old RecordingTrigger** for now (backward compatibility)
 
 **Verification:** Run `npm run verify` - should compile with no errors
 
 ### Phase 2: Keyboard Listener Update
-1. Update `KeyListener::start()` signature to accept `ShortcutsState`
-2. Implement pressed keys tracking with `HashSet<u32>`
-3. Add shortcut matching logic
-4. Remove hardcoded `LOCK_MODIFIER` constant
+1. Update `KeyListener::start()` signature to accept `initial_config: ShortcutsConfig`
+2. Create mpsc channel for config updates: `(config_tx, config_rx)`
+3. Cache shortcuts locally in spawned thread
+4. Implement `config_rx.try_recv()` check on each event
+5. Implement pressed keys tracking with `HashSet<u32>`
+6. Add shortcut matching logic
+7. Add `update_shortcuts()` method
+8. Remove hardcoded `LOCK_MODIFIER` constant
 
 **Verification:** Test keyboard events still work with simple shortcuts
 
 ### Phase 3: Setup Integration & Migration
 1. Update `setup.rs` to call migration on startup
-2. Create `ShortcutsState` and pass to `KeyListener`
-3. Update globe key fix logic
-4. Test migration with existing user configs
+2. Pass initial config to `KeyListener::start()`
+3. Manage KeyListener in Tauri state with `app.manage(listener)`
+4. Update globe key fix logic to use `KeyListener::uses_fn_key(&config)`
+5. Test migration with existing user configs
 
 **Verification:** Existing users' trigger preferences migrate correctly
 
@@ -587,15 +845,24 @@ Remove the old restart logic - hot-swap makes it unnecessary!
 
 **Verification:** Commands work via Tauri devtools, hot-swap updates keyboard listener
 
-### Phase 5: Frontend - Key Capture Component
-1. Create `KeyCaptureInput.tsx` with keyboard event handling
-2. Add "Use Fn" button
-3. Implement key label mapping
-4. Test capturing various key combinations
+### Phase 5: Backend - Key Capture Events & Commands
+1. Create `src-tauri/src/shortcuts/events.rs` with `KeyCaptureEvent` enum
+2. Add `start_key_capture` and `stop_key_capture` commands to shortcuts.rs
+3. Add `KeyCaptureState` struct with `Arc<Mutex<bool>>` for controlling capture
+4. Register events in lib.rs and manage KeyCaptureState in setup.rs
+5. Test event streaming via Tauri devtools
 
-**Verification:** Can capture Shift+R, Cmd+Space, etc.; Fn button works
+**Verification:** Can start/stop capture, events stream to frontend correctly
 
-### Phase 6: Frontend - Shortcuts Configuration UI
+### Phase 6: Frontend - Key Capture Hook & Component
+1. Create `useKeyCapture.ts` hook to listen to KeyCaptureEvent stream
+2. Create `KeyCaptureInput.tsx` using the hook
+3. Test capturing various key combinations including Fn key
+4. Verify real-time visual feedback
+
+**Verification:** Can capture Shift+R, Cmd+Space, Fn, Fn+Space, etc. via backend streaming
+
+### Phase 7: Frontend - Shortcuts Configuration UI
 1. Create `ShortcutsConfig.tsx` with TanStack Query hooks
 2. Add three KeyCaptureInput sections
 3. Implement auto-save on change
@@ -603,14 +870,14 @@ Remove the old restart logic - hot-swap makes it unnecessary!
 
 **Verification:** Can configure all 3 shortcuts, changes save and take effect immediately
 
-### Phase 7: Preferences Integration
+### Phase 8: Preferences Integration
 1. Update `Hotkeys.tsx` to use new component
 2. Remove old restart logic and TriggerKeySelector
 3. Test in preferences page
 
 **Verification:** Preferences page shows new UI, shortcuts work, no restart needed
 
-### Phase 8: Onboarding Update (Optional)
+### Phase 9: Onboarding Update (Optional)
 1. Create `ShortcutsStep.tsx` or update `TriggerKeyStep.tsx`
 2. Update routes and navigation
 3. Update `OnboardingStep` enum in config.rs
@@ -618,7 +885,7 @@ Remove the old restart logic - hot-swap makes it unnecessary!
 
 **Verification:** Onboarding works with new shortcuts step
 
-### Phase 9: Testing & Edge Cases
+### Phase 10: Testing & Edge Cases
 1. Test overlapping shortcuts (e.g., Fn vs Fn+Space)
 2. Test rapid key presses and releases
 3. Test hot-swap while recording
@@ -628,7 +895,7 @@ Remove the old restart logic - hot-swap makes it unnecessary!
 
 **Verification:** All edge cases handled correctly, no crashes
 
-### Phase 10: Cleanup (Optional)
+### Phase 11: Cleanup (Optional)
 1. Consider removing old `RecordingTrigger` (breaking change)
 2. Remove old `TriggerKeySelector` component if unused
 3. Update documentation
@@ -657,23 +924,24 @@ Remove the old restart logic - hot-swap makes it unnecessary!
 
 **Problem:** Keyboard listener runs in separate thread, how to update without restart?
 
-**Solution:** RwLock-based shared state
-- `ShortcutsState` wraps config in `Arc<RwLock<ShortcutsConfig>>`
-- Keyboard listener calls `shortcuts_state.get()` on each event
-- Save command calls `shortcuts_state.update(new_config)`
-- RwLock allows many concurrent readers (fast path)
-- Write lock only needed during config updates (rare)
+**Solution:** mpsc channel-based config updates
+- KeyListener creates channel: `(config_tx, config_rx)`
+- **Local cache**: shortcuts stored as `mut shortcuts` variable in thread
+- Event loop checks `config_rx.try_recv()` on each event (~5ns overhead)
+- `update_shortcuts()` method sends new config via `config_tx.blocking_send()`
+- No locks needed - just a simple variable update!
 
-**Performance:** ~10ns overhead per event (negligible)
+**Performance:** ~5ns overhead per event (faster than RwLock!)
 
-### 3. Fn Key Special Handling
+### 3. Keycode Mismatch Prevention
 
-**Problem:** JavaScript cannot capture Fn key in webview
+**Problem:** JavaScript keycodes ≠ macOS keycodes
 
-**Solutions:**
-- Frontend: "Use Fn" button that directly adds `{ keycode: 63, label: "Fn" }`
-- Backend: Fn key (keycode 63) works normally in Rust keyboard listener
-- UI: Show Fn badge clearly when it's part of a shortcut
+**Solution:** Backend-streamed key capture
+- Backend uses same `dictara_keyboard` crate as runtime listener
+- Events contain correct macOS keycodes (e.g., Space = 49, not 32)
+- Frontend just displays and saves what backend sends
+- **Bonus:** Can capture Fn key that JavaScript cannot detect!
 
 ### 4. Space Key Swallowing
 
@@ -718,15 +986,17 @@ Remove the old restart logic - hot-swap makes it unnecessary!
 
 ### 8. Thread Safety
 
-**Why RwLock over Mutex:**
-- Keyboard events: ~50-100/sec (many reads)
-- Config updates: ~1/hour (rare writes)
-- RwLock allows parallel reads → better performance
+**Why mpsc channel over Arc<RwLock>:**
+- **Simpler**: No lock management needed
+- **Faster**: Local variable read vs RwLock acquisition
+- **More idiomatic**: Channels are the Rust way for thread communication
+- **No contention**: try_recv() is non-blocking and lock-free
 
-**Clone strategy:**
-- `ShortcutsConfig` is small (~100 bytes)
-- Cloning is cheaper than holding read lock across event processing
-- Prevents lock contention and potential deadlocks
+**Why this works:**
+- Keyboard events: ~50-100/sec → fast local reads
+- Config updates: ~1/hour → rare channel sends
+- `ShortcutsConfig` is small (~100 bytes) → cheap to clone through channel
+- No shared mutable state → no synchronization bugs possible
 
 ---
 
@@ -742,7 +1012,7 @@ Remove the old restart logic - hot-swap makes it unnecessary!
 | Hot-swap during recording | State manager handles gracefully, recording continues |
 | Migration fails | Config falls back to defaults (Fn trigger) |
 | Invalid keycodes from frontend | Backend validation rejects and returns error |
-| Thread deadlock | RwLock + clone strategy prevents holding locks |
+| Thread deadlock | No locks used - channel communication is deadlock-free |
 | Globe key fix race condition | Only update on Fn usage change, not every save |
 
 ---

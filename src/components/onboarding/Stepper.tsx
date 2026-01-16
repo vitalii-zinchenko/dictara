@@ -1,12 +1,15 @@
 import { Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { STEPS, type StepDefinition } from './utils'
+import { useOnboardingNavigation } from '@/hooks/useOnboardingNavigation'
 
 interface StepperProps {
   currentStepIndex: number
 }
 
 export function Stepper({ currentStepIndex }: StepperProps) {
+  const { goToStep } = useOnboardingNavigation()
+
   return (
     <nav className="space-y-1">
       {STEPS.map((step, index) => (
@@ -16,6 +19,7 @@ export function Stepper({ currentStepIndex }: StepperProps) {
           index={index}
           isCompleted={index < currentStepIndex}
           isCurrent={index === currentStepIndex}
+          onClick={() => goToStep(step.id)}
         />
       ))}
     </nav>
@@ -27,13 +31,16 @@ interface StepItemProps {
   index: number
   isCompleted: boolean
   isCurrent: boolean
+  onClick: () => void
 }
 
-function StepItem({ step, index, isCompleted, isCurrent }: StepItemProps) {
+function StepItem({ step, index, isCompleted, isCurrent, onClick }: StepItemProps) {
   return (
-    <div
+    <button
+      onClick={onClick}
       className={cn(
-        'flex items-center gap-3 py-2 px-3 rounded-md text-sm transition-colors',
+        'flex items-center gap-3 py-2 px-3 rounded-md text-sm transition-colors w-full',
+        'hover:bg-accent/50 cursor-pointer',
         isCurrent && 'bg-accent font-medium',
         !isCurrent && !isCompleted && 'text-muted-foreground'
       )}
@@ -49,6 +56,6 @@ function StepItem({ step, index, isCompleted, isCurrent }: StepItemProps) {
         {isCompleted ? <Check className="w-3.5 h-3.5" /> : index + 1}
       </div>
       <span className="truncate">{step.label}</span>
-    </div>
+    </button>
   )
 }

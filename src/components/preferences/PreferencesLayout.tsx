@@ -26,7 +26,7 @@ const menuItems = [
     icon: Key,
   },
   {
-    title: 'Hotkeys',
+    title: 'Shortcuts',
     url: '/preferences/hotkeys',
     icon: Keyboard,
   },
