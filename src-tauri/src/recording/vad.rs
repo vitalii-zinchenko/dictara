@@ -3,7 +3,7 @@
 //! This module implements VAD using the official Silero VAD model directly,
 //! based on: https://github.com/snakers4/silero-vad/tree/master/examples/rust-example
 
-use ndarray::{Array, Array1, Array2, ArrayBase, ArrayD, Dim, IxDynImpl, OwnedRepr};
+use ndarray::{Array, Array1, ArrayBase, ArrayD, Dim, IxDynImpl, OwnedRepr};
 use ort::session::Session;
 use ort::value::Value;
 use std::collections::VecDeque;
@@ -143,15 +143,20 @@ impl SileroVad {
         input_with_context.extend_from_slice(self.context.as_slice().unwrap());
         input_with_context.extend_from_slice(audio_frame);
 
-        let frame =
-            Array2::<f32>::from_shape_vec([1, input_with_context.len()], input_with_context)
-                .map_err(|e| VadError::ComputeError(e.to_string()))?;
-
-        let frame_value =
-            Value::from_array(frame).map_err(|e| VadError::ComputeError(e.to_string()))?;
-        let state_value = Value::from_array(take(&mut self.state))
+        // ort rc.11 changed the from_array API - convert to (shape, vec) format
+        let frame_shape = vec![1, input_with_context.len()];
+        let frame_value = Value::from_array((frame_shape, input_with_context))
             .map_err(|e| VadError::ComputeError(e.to_string()))?;
-        let sr_value = Value::from_array(self.sample_rate.clone())
+
+        let state = take(&mut self.state);
+        let state_shape: Vec<usize> = state.shape().to_vec();
+        let state_data: Vec<f32> = state.into_iter().collect();
+        let state_value = Value::from_array((state_shape, state_data))
+            .map_err(|e| VadError::ComputeError(e.to_string()))?;
+
+        let sr_shape = vec![1];
+        let sr_data: Vec<i64> = self.sample_rate.to_vec();
+        let sr_value = Value::from_array((sr_shape, sr_data))
             .map_err(|e| VadError::ComputeError(e.to_string()))?;
 
         let res = self

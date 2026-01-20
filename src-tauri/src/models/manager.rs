@@ -57,6 +57,89 @@ impl ModelManager {
         &self.models_dir
     }
 
+    /// Get the path to a model, trying new structure first then falling back to old.
+    ///
+    /// New structure: models_dir/{model.name}/{file.filename}
+    /// Old structure: models_dir/{model.filename} (single-file) or models_dir/{model.filename}/ (multi-file)
+    ///
+    /// Returns the directory path (not individual file path).
+    fn get_model_path_with_fallback(&self, entry: &ModelCatalogEntry) -> PathBuf {
+        let new_dir = self.models_dir.join(&entry.name);
+
+        // Check if new structure exists
+        if new_dir.exists() {
+            return new_dir;
+        }
+
+        // Fall back to old structure
+        if entry.files.len() == 1 {
+            // Old single-file: models_dir/ggml-small.bin (file, not directory)
+            // But we need to return directory for consistency, check if old file exists
+            let old_file_path = self.models_dir.join(&entry.filename);
+            if old_file_path.exists() {
+                // Return the parent directory (models_dir) - caller will handle file vs dir
+                return self.models_dir.clone();
+            }
+        } else {
+            // Old multi-file: models_dir/parakeet-tdt-0.6b-v3-int8/ (directory)
+            let old_dir = self.models_dir.join(&entry.filename);
+            if old_dir.exists() {
+                return old_dir;
+            }
+        }
+
+        // Neither exists, return new structure path (for new downloads)
+        new_dir
+    }
+
+    /// Migrate old single-file models to new unified directory structure.
+    ///
+    /// Runs asynchronously on app startup. Moves:
+    /// - Old: models_dir/ggml-small.bin
+    /// - New: models_dir/whisper-small/ggml-small.bin
+    ///
+    /// Multi-file models (Parakeet) don't need migration as they already use directory structure.
+    pub async fn migrate_old_models(&self) -> Result<(), String> {
+        info!("Checking for models to migrate to new structure...");
+
+        for entry in get_model_catalog() {
+            // Only single-file models need migration
+            if entry.files.len() == 1 {
+                let old_file_path = self.models_dir.join(&entry.filename);
+                let new_dir = self.models_dir.join(&entry.name);
+                let new_file_path = new_dir.join(&entry.files[0].filename);
+
+                // Migrate if old exists and new doesn't
+                if old_file_path.exists() && !new_file_path.exists() {
+                    tokio::fs::create_dir_all(&new_dir).await.map_err(|e| {
+                        format!("Failed to create directory during migration: {}", e)
+                    })?;
+
+                    tokio::fs::rename(&old_file_path, &new_file_path)
+                        .await
+                        .map_err(|e| format!("Failed to migrate {}: {}", entry.name, e))?;
+
+                    info!(
+                        "Migrated {} to new structure: {:?}",
+                        entry.name, new_file_path
+                    );
+
+                    // Also migrate .partial file if exists
+                    let old_partial = self.models_dir.join(format!("{}.partial", entry.filename));
+                    if old_partial.exists() {
+                        let new_partial =
+                            new_dir.join(format!("{}.partial", entry.files[0].filename));
+                        let _ = tokio::fs::rename(&old_partial, &new_partial).await;
+                        debug!("Migrated partial file for {}", entry.name);
+                    }
+                }
+            }
+        }
+
+        info!("Model migration check complete");
+        Ok(())
+    }
+
     /// Get all models with their current status.
     pub fn get_all_models(&self, loader: &ModelLoader) -> Vec<ModelInfo> {
         get_model_catalog()
@@ -69,10 +152,8 @@ impl ModelManager {
     }
 
     /// Compute runtime status for a model.
+    /// Checks both new unified structure and old structure for backward compatibility.
     fn compute_status(&self, entry: &ModelCatalogEntry, loader: &ModelLoader) -> ModelStatus {
-        let model_path = self.models_dir.join(&entry.filename);
-        let partial_path = self.models_dir.join(format!("{}.partial", entry.filename));
-
         let is_downloading = self
             .downloading
             .lock()
@@ -81,30 +162,87 @@ impl ModelManager {
             .copied()
             .unwrap_or(false);
 
+        // Check if downloaded in new structure: models_dir/{name}/{files}
+        let new_dir = self.models_dir.join(&entry.name);
+        let is_downloaded_new = new_dir.is_dir()
+            && entry
+                .files
+                .iter()
+                .all(|f| new_dir.join(&f.filename).exists());
+
+        // Check if downloaded in old structure
+        let is_downloaded_old = if entry.files.len() == 1 {
+            // Old single-file: models_dir/{filename}
+            self.models_dir.join(&entry.filename).exists()
+        } else {
+            // Old multi-file: models_dir/{filename}/ (same as new for current Parakeet models)
+            let old_dir = self.models_dir.join(&entry.filename);
+            old_dir.is_dir()
+                && entry
+                    .files
+                    .iter()
+                    .all(|f| old_dir.join(&f.filename).exists())
+        };
+
+        let is_downloaded = is_downloaded_new || is_downloaded_old;
+
+        // Track partial download progress (aggregate across all files)
+        let downloaded_bytes = {
+            let mut total = 0u64;
+            for file in &entry.files {
+                // Check new location first
+                let new_partial = new_dir.join(format!("{}.partial", file.filename));
+                if new_partial.exists() {
+                    total += new_partial.metadata().map(|m| m.len()).unwrap_or(0);
+                } else if entry.files.len() == 1 {
+                    // Check old location for single-file models
+                    let old_partial = self.models_dir.join(format!("{}.partial", entry.filename));
+                    total += old_partial.metadata().map(|m| m.len()).unwrap_or(0);
+                }
+            }
+            total
+        };
+
         ModelStatus {
-            is_downloaded: model_path.exists(),
+            is_downloaded,
             is_downloading,
             is_loaded: loader.is_model_loaded(&entry.name),
             is_loading: loader.is_model_loading(&entry.name),
-            downloaded_bytes: partial_path.metadata().map(|m| m.len()).unwrap_or(0),
+            downloaded_bytes,
         }
     }
 
     /// Start downloading a model.
     ///
     /// Emits progress events to the frontend during download.
-    /// Supports resuming interrupted downloads.
+    /// Downloads into new unified structure: models_dir/{model_name}/{files}
+    /// Supports resuming interrupted downloads with .partial files.
     pub async fn download_model(&self, model_name: &str, app: AppHandle) -> Result<(), String> {
         let entry = get_model_catalog()
             .into_iter()
             .find(|e| e.name == model_name)
             .ok_or_else(|| format!("Model '{}' not found in catalog", model_name))?;
 
-        let model_path = self.models_dir.join(&entry.filename);
-        let partial_path = self.models_dir.join(format!("{}.partial", entry.filename));
+        // Check if already downloaded (check both new and old structures)
+        let new_dir = self.models_dir.join(&entry.name);
+        let is_downloaded_new = new_dir.is_dir()
+            && entry
+                .files
+                .iter()
+                .all(|f| new_dir.join(&f.filename).exists());
 
-        // Check if already downloaded
-        if model_path.exists() {
+        let is_downloaded_old = if entry.files.len() == 1 {
+            self.models_dir.join(&entry.filename).exists()
+        } else {
+            let old_dir = self.models_dir.join(&entry.filename);
+            old_dir.is_dir()
+                && entry
+                    .files
+                    .iter()
+                    .all(|f| old_dir.join(&f.filename).exists())
+        };
+
+        if is_downloaded_new || is_downloaded_old {
             info!("Model '{}' already downloaded", model_name);
             return Ok(());
         }
@@ -136,25 +274,9 @@ impl ModelManager {
 
         info!("Starting download of model '{}'", model_name);
 
-        // Check for partial download to resume
-        let resume_from = if partial_path.exists() {
-            let size = partial_path.metadata().map(|m| m.len()).unwrap_or(0);
-            info!("Resuming download from {} bytes", size);
-            size
-        } else {
-            0
-        };
-
-        // Perform download
+        // Use unified download for all models (always use new structure)
         let result = self
-            .do_download(
-                &entry,
-                &partial_path,
-                &model_path,
-                resume_from,
-                &app,
-                &cancel_token,
-            )
+            .download_model_unified(&entry, &app, &cancel_token)
             .await;
 
         // Clear downloading state
@@ -188,20 +310,171 @@ impl ModelManager {
         result
     }
 
-    /// Perform the actual download.
-    async fn do_download(
+    /// Unified download implementation for all models (single-file and multi-file).
+    ///
+    /// Downloads all files in parallel, aggregates progress, and verifies checksums in parallel.
+    /// Uses new structure: models_dir/{model_name}/{files}
+    async fn download_model_unified(
         &self,
         entry: &ModelCatalogEntry,
-        partial_path: &PathBuf,
-        final_path: &PathBuf,
-        resume_from: u64,
         app: &AppHandle,
         cancel_token: &CancellationToken,
+    ) -> Result<(), String> {
+        let model_dir = self.models_dir.join(&entry.name);
+
+        // Create model directory
+        tokio::fs::create_dir_all(&model_dir)
+            .await
+            .map_err(|e| format!("Failed to create model directory: {}", e))?;
+
+        let total_size = entry.size_bytes;
+        let file_count = entry.files.len();
+
+        // Shared progress state: tracks downloaded bytes per file
+        let progress = Arc::new(Mutex::new(vec![0u64; file_count]));
+
+        info!(
+            "Downloading model '{}' ({} files) into {:?}",
+            entry.name, file_count, model_dir
+        );
+
+        // Phase 1: Download all files in parallel
+        let mut download_handles = vec![];
+
+        for (idx, file) in entry.files.iter().enumerate() {
+            let file = file.clone();
+            let model_dir = model_dir.clone();
+            let cancel_token = cancel_token.clone();
+            let progress = progress.clone();
+            let app = app.clone();
+            let model_name = entry.name.clone();
+
+            let handle = tokio::spawn(async move {
+                let partial_path = model_dir.join(format!("{}.partial", file.filename));
+
+                // Check for existing partial download to resume
+                let resume_from = if partial_path.exists() {
+                    partial_path.metadata().map(|m| m.len()).unwrap_or(0)
+                } else {
+                    0
+                };
+
+                if resume_from > 0 {
+                    info!("Resuming {} from {} bytes", file.filename, resume_from);
+                }
+
+                // Download with progress tracking and resume support
+                Self::download_file_with_progress(
+                    &file.url,
+                    &partial_path,
+                    resume_from,
+                    &cancel_token,
+                    idx,
+                    &progress,
+                    total_size,
+                    &model_name,
+                    &app,
+                )
+                .await
+            });
+
+            download_handles.push(handle);
+        }
+
+        // Wait for all downloads to complete
+        for (idx, handle) in download_handles.into_iter().enumerate() {
+            handle
+                .await
+                .map_err(|e| format!("Download task {} failed: {}", idx, e))??;
+        }
+
+        // Check for cancellation before verification
+        if cancel_token.is_cancelled() {
+            // Clean up partial downloads
+            let _ = tokio::fs::remove_dir_all(&model_dir).await;
+            return Err("Download cancelled".to_string());
+        }
+
+        info!("All files downloaded, verifying checksums...");
+
+        // Emit verifying state
+        let _ = ModelDownloadStateChanged::Verifying {
+            model_name: entry.name.clone(),
+        }
+        .emit(app);
+
+        // Phase 2: Verify checksums in parallel
+        let mut verify_handles = vec![];
+
+        for file in &entry.files {
+            let file = file.clone();
+            let model_dir = model_dir.clone();
+
+            let handle = tokio::spawn(async move {
+                let partial_path = model_dir.join(format!("{}.partial", file.filename));
+
+                // Skip verification for "TBD" checksums (temporary during development)
+                if file.sha256 != "TBD" {
+                    Self::verify_checksum(&partial_path, &file.sha256).await
+                } else {
+                    Ok(())
+                }
+            });
+
+            verify_handles.push(handle);
+        }
+
+        // Wait for all verifications
+        for (idx, handle) in verify_handles.into_iter().enumerate() {
+            if let Err(e) = handle
+                .await
+                .map_err(|e| format!("Verification task {} failed: {}", idx, e))?
+            {
+                // Clean up on verification failure
+                let _ = tokio::fs::remove_dir_all(&model_dir).await;
+                return Err(format!("Checksum verification failed: {}", e));
+            }
+        }
+
+        info!("All checksums verified, finalizing...");
+
+        // Phase 3: Rename all .partial files to final names
+        for file in &entry.files {
+            let file_path = model_dir.join(&file.filename);
+            let partial_path = model_dir.join(format!("{}.partial", file.filename));
+
+            tokio::fs::rename(&partial_path, &file_path)
+                .await
+                .map_err(|e| format!("Failed to rename {} to final: {}", file.filename, e))?;
+        }
+
+        info!(
+            "Model '{}' download complete: {} files",
+            entry.name, file_count
+        );
+
+        Ok(())
+    }
+
+    /// Download a single file with progress tracking and resume support.
+    ///
+    /// Updates shared progress state and emits progress events aggregated across all files.
+    #[allow(clippy::too_many_arguments)]
+    async fn download_file_with_progress(
+        url: &str,
+        dest_path: &Path,
+        resume_from: u64,
+        cancel_token: &CancellationToken,
+        file_index: usize,
+        progress: &Arc<Mutex<Vec<u64>>>,
+        total_size: u64,
+        model_name: &str,
+        app: &AppHandle,
     ) -> Result<(), String> {
         let client = reqwest::Client::new();
 
         // Build request with Range header for resume
-        let mut request = client.get(&entry.url);
+        let mut request = client.get(url);
         if resume_from > 0 {
             request = request.header("Range", format!("bytes={}-", resume_from));
         }
@@ -221,39 +494,30 @@ impl ModelManager {
             ));
         }
 
-        // Get total size from Content-Length or Content-Range
-        let total_bytes = if resume_from > 0 {
-            // For resumed downloads, parse Content-Range header
-            response
-                .headers()
-                .get("content-range")
-                .and_then(|h| h.to_str().ok())
-                .and_then(|s| s.split('/').next_back())
-                .and_then(|s| s.parse::<u64>().ok())
-                .unwrap_or(entry.estimated_size_bytes)
+        // Open file for appending (if resuming) or create new
+        let file = if resume_from > 0 {
+            tokio::fs::OpenOptions::new()
+                .append(true)
+                .open(dest_path)
+                .await
+                .map_err(|e| format!("Failed to open file for append: {}", e))?
         } else {
-            response
-                .content_length()
-                .unwrap_or(entry.estimated_size_bytes)
+            tokio::fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(dest_path)
+                .await
+                .map_err(|e| format!("Failed to create file: {}", e))?
         };
-
-        // Open file for appending (or create)
-        let file = tokio::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(partial_path)
-            .await
-            .map_err(|e| format!("Failed to create partial file: {}", e))?;
 
         let mut file = tokio::io::BufWriter::new(file);
         let mut stream = response.bytes_stream();
-        let mut downloaded = resume_from;
+        let mut downloaded_this_session = 0u64;
         let mut last_emit = std::time::Instant::now();
 
         while let Some(chunk_result) = stream.next().await {
-            // Check for cancellation
             if cancel_token.is_cancelled() {
-                info!("Download cancelled");
                 return Err("Download cancelled".to_string());
             }
 
@@ -263,54 +527,44 @@ impl ModelManager {
                 .await
                 .map_err(|e| format!("Failed to write chunk: {}", e))?;
 
-            downloaded += chunk.len() as u64;
+            downloaded_this_session += chunk.len() as u64;
 
-            // Emit progress every 100ms to avoid flooding
+            // Update shared progress and emit every 100ms to avoid flooding
             if last_emit.elapsed().as_millis() >= 100 {
-                let percentage = (downloaded as f64 / total_bytes as f64) * 100.0;
+                let mut prog = progress.lock().unwrap();
+                prog[file_index] = resume_from + downloaded_this_session;
+                let total_downloaded: u64 = prog.iter().sum();
+                drop(prog);
+
+                let percentage = (total_downloaded as f64 / total_size as f64) * 100.0;
 
                 debug!(
-                    "Download progress: {:.1}% ({}/{})",
-                    percentage, downloaded, total_bytes
+                    "Download progress: {:.1}% ({}/{} bytes)",
+                    percentage, total_downloaded, total_size
                 );
 
                 let _ = ModelDownloadStateChanged::Progress {
-                    model_name: entry.name.clone(),
-                    downloaded_bytes: downloaded,
-                    total_bytes,
+                    model_name: model_name.to_string(),
+                    downloaded_bytes: total_downloaded,
+                    total_bytes: total_size,
                     percentage,
                 }
                 .emit(app);
+
                 last_emit = std::time::Instant::now();
             }
         }
 
-        // Flush and close file
+        // Final progress update for this file
+        {
+            let mut prog = progress.lock().unwrap();
+            prog[file_index] = resume_from + downloaded_this_session;
+        }
+
+        // Flush file
         file.flush()
             .await
             .map_err(|e| format!("Failed to flush file: {}", e))?;
-
-        // Drop the file handle to ensure it's closed before verification
-        drop(file);
-
-        // Emit verifying event and verify checksum
-        info!("Verifying checksum for model '{}'", entry.name);
-        let _ = ModelDownloadStateChanged::Verifying {
-            model_name: entry.name.clone(),
-        }
-        .emit(app);
-
-        if let Err(e) = Self::verify_checksum(partial_path, &entry.sha256).await {
-            // Delete the corrupted partial file
-            let _ = tokio::fs::remove_file(partial_path).await;
-            return Err(format!("Checksum verification failed: {}", e));
-        }
-        info!("Checksum verified successfully for model '{}'", entry.name);
-
-        // Rename partial to final
-        tokio::fs::rename(partial_path, final_path)
-            .await
-            .map_err(|e| format!("Failed to rename partial file: {}", e))?;
 
         Ok(())
     }
@@ -362,44 +616,75 @@ impl ModelManager {
     }
 
     /// Delete a downloaded model.
+    /// Removes model from both new and old locations if they exist.
     pub fn delete_model(&self, model_name: &str, loader: &ModelLoader) -> Result<(), String> {
         let entry = get_model_catalog()
             .into_iter()
             .find(|e| e.name == model_name)
             .ok_or_else(|| format!("Model '{}' not found in catalog", model_name))?;
 
-        let model_path = self.models_dir.join(&entry.filename);
-        let partial_path = self.models_dir.join(format!("{}.partial", entry.filename));
-
         // Unload if currently loaded
         if loader.is_model_loaded(model_name) {
             loader.unload_model();
         }
 
-        // Delete model file
-        if model_path.exists() {
-            std::fs::remove_file(&model_path)
-                .map_err(|e| format!("Failed to delete model file: {}", e))?;
-            info!("Deleted model file: {:?}", model_path);
+        let mut deleted_something = false;
+
+        // Delete from new structure: models_dir/{name}/
+        let new_dir = self.models_dir.join(&entry.name);
+        if new_dir.exists() && new_dir.is_dir() {
+            std::fs::remove_dir_all(&new_dir)
+                .map_err(|e| format!("Failed to delete model directory: {}", e))?;
+            info!("Deleted model from new location: {:?}", new_dir);
+            deleted_something = true;
         }
 
-        // Delete partial file if exists
-        if partial_path.exists() {
-            std::fs::remove_file(&partial_path)
-                .map_err(|e| format!("Failed to delete partial file: {}", e))?;
+        // Delete from old structure if it exists
+        if entry.files.len() == 1 {
+            // Old single-file: models_dir/{filename}
+            let old_file = self.models_dir.join(&entry.filename);
+            if old_file.exists() {
+                std::fs::remove_file(&old_file)
+                    .map_err(|e| format!("Failed to delete old model file: {}", e))?;
+                info!("Deleted model from old location: {:?}", old_file);
+                deleted_something = true;
+            }
+
+            // Also delete old .partial if exists
+            let old_partial = self.models_dir.join(format!("{}.partial", entry.filename));
+            if old_partial.exists() {
+                let _ = std::fs::remove_file(&old_partial);
+            }
+        } else {
+            // Old multi-file: models_dir/{filename}/ (might be same as new for Parakeet)
+            let old_dir = self.models_dir.join(&entry.filename);
+            if old_dir.exists() && old_dir.is_dir() && old_dir != new_dir {
+                std::fs::remove_dir_all(&old_dir)
+                    .map_err(|e| format!("Failed to delete old model directory: {}", e))?;
+                info!("Deleted model from old location: {:?}", old_dir);
+                deleted_something = true;
+            }
+        }
+
+        if !deleted_something {
+            warn!("Model '{}' was not found in any location", model_name);
         }
 
         Ok(())
     }
 
-    /// Get the path to a model file.
+    /// Get the path to a model directory.
+    /// Returns new structure first, falls back to old structure for backward compatibility.
+    ///
+    /// New structure: models_dir/{model_name}/
+    /// Old structure: models_dir/{filename} (single) or models_dir/{filename}/ (multi)
     pub fn get_model_path(&self, model_name: &str) -> Result<PathBuf, String> {
         let entry = get_model_catalog()
             .into_iter()
             .find(|e| e.name == model_name)
             .ok_or_else(|| format!("Model '{}' not found in catalog", model_name))?;
 
-        Ok(self.models_dir.join(&entry.filename))
+        Ok(self.get_model_path_with_fallback(&entry))
     }
 
     /// Check if a model is downloaded.

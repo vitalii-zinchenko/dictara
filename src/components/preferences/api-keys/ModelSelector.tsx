@@ -77,7 +77,7 @@ function ModelCard({
           <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
             <span className="flex items-center gap-1">
               <HardDrive className="h-3 w-3" />
-              {formatBytes(model.estimatedSizeBytes)}
+              {formatBytes(model.sizeBytes)}
             </span>
             <span className="flex items-center gap-1">
               <Cpu className="h-3 w-3" />~{model.estimatedRamMb} MB RAM

@@ -97,6 +97,17 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
     );
     let model_loader = Arc::new(ModelLoader::new(model_manager.models_dir().clone()));
 
+    // Migrate old models to new unified directory structure in background
+    // This runs asynchronously to not block app startup
+    {
+        let manager = model_manager.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Err(e) = manager.migrate_old_models().await {
+                error!("Failed to migrate models: {}", e);
+            }
+        });
+    }
+
     // Check if any provider is properly configured
     let needs_configuration = match &app_config.active_provider {
         Some(Provider::OpenAI) => {

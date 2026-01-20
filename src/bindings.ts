@@ -479,7 +479,7 @@ export type ModelDownloadStateChanged =
 /**
  * Combined view sent to frontend (catalog + status merged).
  */
-export type ModelInfo = { name: string; displayName: string; description: string; estimatedSizeBytes: number; estimatedRamMb: number; isDownloaded: boolean; isDownloading: boolean; isLoaded: boolean; isLoading: boolean; downloadedBytes: number }
+export type ModelInfo = { name: string; displayName: string; description: string; sizeBytes: number; estimatedRamMb: number; isDownloaded: boolean; isDownloading: boolean; isLoaded: boolean; isLoading: boolean; downloadedBytes: number }
 /**
  * Model loading state change event - single event stream for all loading state transitions
  */

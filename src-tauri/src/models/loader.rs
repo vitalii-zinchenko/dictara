@@ -35,6 +35,50 @@ impl ModelLoader {
         }
     }
 
+    /// Resolve model path with backward compatibility.
+    ///
+    /// New structure: models_dir/{model_name}/{files}
+    /// Old structure: models_dir/{filename} (single) or models_dir/{filename}/ (multi)
+    ///
+    /// Returns the path that LocalClient::new expects:
+    /// - For single-file (Whisper): path to the .bin file
+    /// - For multi-file (Parakeet): path to the directory containing model files
+    fn resolve_model_path(&self, entry: &super::catalog::ModelCatalogEntry) -> PathBuf {
+        // New structure
+        let new_dir = self.models_dir.join(&entry.name);
+
+        if entry.files.len() == 1 {
+            // Single-file model (Whisper)
+            let new_file = new_dir.join(&entry.files[0].filename);
+            if new_file.exists() {
+                return new_file; // Return file path for LocalClient::new
+            }
+
+            // Fall back to old structure
+            let old_file = self.models_dir.join(&entry.filename);
+            if old_file.exists() {
+                return old_file;
+            }
+
+            // Return new path for error messages
+            new_file
+        } else {
+            // Multi-file model (Parakeet)
+            if new_dir.is_dir() {
+                return new_dir; // Return directory path for LocalClient::new
+            }
+
+            // Fall back to old structure (might be same as new for current Parakeet models)
+            let old_dir = self.models_dir.join(&entry.filename);
+            if old_dir.is_dir() {
+                return old_dir;
+            }
+
+            // Return new path for error messages
+            new_dir
+        }
+    }
+
     /// Load a model into memory.
     ///
     /// This is an async operation that:
@@ -80,7 +124,7 @@ impl ModelLoader {
             .find(|e| e.name == model_name)
             .ok_or_else(|| format!("Model '{}' not found in catalog", model_name))?;
 
-        let model_path = self.models_dir.join(&entry.filename);
+        let model_path = self.resolve_model_path(&entry);
         debug!("Model path resolved: {:?}", model_path);
 
         // Verify model exists
@@ -100,9 +144,11 @@ impl ModelLoader {
         // Unload current model first
         self.unload_model();
 
-        // Load model in blocking task (Whisper loading is CPU-intensive)
+        // Load model in blocking task (model loading is CPU-intensive)
         let model_name_clone = model_name.to_string();
-        let result = tokio::task::spawn_blocking(move || LocalClient::new(&model_path)).await;
+        let model_type = entry.model_type;
+        let result =
+            tokio::task::spawn_blocking(move || LocalClient::new(&model_path, model_type)).await;
 
         // Clear loading state
         {
@@ -211,8 +257,8 @@ impl ModelLoader {
     /// Note: Prefer `transcribe_with_model` which verifies the correct model is loaded.
     #[allow(dead_code)]
     pub fn transcribe(&self, audio_path: &std::path::Path) -> Result<String, String> {
-        let current = self.current_model.lock().unwrap();
-        match current.as_ref() {
+        let mut current = self.current_model.lock().unwrap();
+        match current.as_mut() {
             Some(model) => model
                 .client
                 .transcribe_file(audio_path)
@@ -262,8 +308,8 @@ impl ModelLoader {
         }
 
         // Now transcribe - recheck that model is still correct to handle race conditions
-        let current = self.current_model.lock().unwrap();
-        match current.as_ref() {
+        let mut current = self.current_model.lock().unwrap();
+        match current.as_mut() {
             Some(model) if model.name == model_name => {
                 debug!("Transcribing with verified model '{}'", model_name);
                 model
@@ -331,7 +377,7 @@ impl ModelLoader {
             .find(|e| e.name == model_name)
             .ok_or_else(|| format!("Model '{}' not found in catalog", model_name))?;
 
-        let model_path = self.models_dir.join(&entry.filename);
+        let model_path = self.resolve_model_path(&entry);
         debug!("Model path resolved (sync): {:?}", model_path);
 
         // Verify model exists
@@ -345,8 +391,9 @@ impl ModelLoader {
         self.unload_model();
 
         // Load model (blocking)
-        debug!("Starting Whisper context initialization...");
-        let result = LocalClient::new(&model_path);
+        let model_type = entry.model_type;
+        debug!("Starting model initialization ({:?})...", model_type);
+        let result = LocalClient::new(&model_path, model_type);
 
         // Clear loading state
         {

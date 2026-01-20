@@ -20,7 +20,7 @@ pub struct ModelInfo {
     pub name: String,
     pub display_name: String,
     pub description: String,
-    pub estimated_size_bytes: u64,
+    pub size_bytes: u64,
     pub estimated_ram_mb: u64,
 
     // From status
@@ -37,7 +37,7 @@ impl ModelInfo {
             name: catalog.name.clone(),
             display_name: catalog.display_name.clone(),
             description: catalog.description.clone(),
-            estimated_size_bytes: catalog.estimated_size_bytes,
+            size_bytes: catalog.size_bytes,
             estimated_ram_mb: catalog.estimated_ram_mb,
             is_downloaded: status.is_downloaded,
             is_downloading: status.is_downloading,

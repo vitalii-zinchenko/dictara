@@ -1,28 +1,39 @@
 use std::path::Path;
 
 use log::{debug, error, info};
+use parakeet_rs::{ParakeetTDT, Transcriber};
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
 use crate::clients::TranscriptionError;
 
-/// Local Whisper client for offline transcription.
-/// This wraps whisper-rs (whisper.cpp bindings) with Metal acceleration on macOS.
+use super::catalog::ModelType;
+
+/// Unified transcription engine supporting multiple backends
+enum TranscriptionEngine {
+    Whisper(WhisperContext),
+    Parakeet(Box<ParakeetTDT>),
+}
+
+/// Local transcription client for offline transcription.
+/// Supports both Whisper (via whisper.cpp with Metal) and Parakeet (via ONNX Runtime).
 pub struct LocalClient {
-    context: WhisperContext,
+    engine: TranscriptionEngine,
+    model_type: ModelType,
 }
 
 impl LocalClient {
-    /// Load a Whisper model into memory.
+    /// Load a transcription model into memory.
     /// This is a blocking operation that can take several seconds for large models.
     ///
     /// # Arguments
-    /// * `model_path` - Path to the GGML model file (e.g., ggml-small.bin)
+    /// * `model_path` - Path to the model file (Whisper: .bin file, Parakeet: directory)
+    /// * `model_type` - Type of model (Whisper or Parakeet)
     ///
     /// # Returns
     /// * `Ok(LocalClient)` - Model loaded successfully
     /// * `Err(TranscriptionError)` - Failed to load model
-    pub fn new(model_path: &Path) -> Result<Self, TranscriptionError> {
-        info!("Loading Whisper model from: {:?}", model_path);
+    pub fn new(model_path: &Path, model_type: ModelType) -> Result<Self, TranscriptionError> {
+        info!("Loading {:?} model from: {:?}", model_type, model_path);
 
         if !model_path.exists() {
             return Err(TranscriptionError::ModelNotDownloaded(
@@ -30,12 +41,23 @@ impl LocalClient {
             ));
         }
 
-        let params = WhisperContextParameters::default();
-        let ctx = WhisperContext::new_with_params(&model_path.to_string_lossy(), params)
-            .map_err(|e| TranscriptionError::ModelLoadFailed(e.to_string()))?;
+        let engine = match model_type {
+            ModelType::Whisper => {
+                let params = WhisperContextParameters::default();
+                let ctx = WhisperContext::new_with_params(&model_path.to_string_lossy(), params)
+                    .map_err(|e| TranscriptionError::ModelLoadFailed(e.to_string()))?;
+                TranscriptionEngine::Whisper(ctx)
+            }
+            ModelType::Parakeet => {
+                // Parakeet expects a directory containing model files
+                let parakeet = ParakeetTDT::from_pretrained(model_path, None)
+                    .map_err(|e| TranscriptionError::ModelLoadFailed(e.to_string()))?;
+                TranscriptionEngine::Parakeet(Box::new(parakeet))
+            }
+        };
 
-        info!("Whisper model loaded successfully");
-        Ok(Self { context: ctx })
+        info!("{:?} model loaded successfully", model_type);
+        Ok(Self { engine, model_type })
     }
 
     /// Transcribe an audio file to text.
@@ -46,37 +68,50 @@ impl LocalClient {
     /// # Returns
     /// * `Ok(String)` - Transcribed text
     /// * `Err(TranscriptionError)` - Transcription failed
-    pub fn transcribe_file(&self, audio_path: &Path) -> Result<String, TranscriptionError> {
-        debug!("Transcribing file: {:?}", audio_path);
+    pub fn transcribe_file(&mut self, audio_path: &Path) -> Result<String, TranscriptionError> {
+        debug!(
+            "Transcribing file with {:?}: {:?}",
+            self.model_type, audio_path
+        );
 
-        // Load audio samples
+        // Load audio samples (both engines use the same format)
         let samples = self.load_audio(audio_path)?;
 
-        // Create transcription state
-        let mut state = self
-            .context
-            .create_state()
-            .map_err(|e| TranscriptionError::LocalTranscriptionFailed(e.to_string()))?;
+        let text = match &mut self.engine {
+            TranscriptionEngine::Whisper(ctx) => {
+                // Create transcription state
+                let mut state = ctx
+                    .create_state()
+                    .map_err(|e| TranscriptionError::LocalTranscriptionFailed(e.to_string()))?;
 
-        // Configure transcription parameters
-        let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+                // Configure transcription parameters
+                let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
 
-        // Set language to auto-detect (or could be configured)
-        params.set_language(Some("auto"));
+                // Set language to auto-detect
+                params.set_language(Some("auto"));
 
-        // Disable printing to stdout
-        params.set_print_special(false);
-        params.set_print_progress(false);
-        params.set_print_realtime(false);
-        params.set_print_timestamps(false);
+                // Disable printing to stdout
+                params.set_print_special(false);
+                params.set_print_progress(false);
+                params.set_print_realtime(false);
+                params.set_print_timestamps(false);
 
-        // Run transcription
-        state
-            .full(params, &samples)
-            .map_err(|e| TranscriptionError::LocalTranscriptionFailed(e.to_string()))?;
+                // Run transcription
+                state
+                    .full(params, &samples)
+                    .map_err(|e| TranscriptionError::LocalTranscriptionFailed(e.to_string()))?;
 
-        // Extract text from segments
-        let text = self.extract_text(&state)?;
+                // Extract text from segments
+                self.extract_whisper_text(&state)?
+            }
+            TranscriptionEngine::Parakeet(parakeet) => {
+                // Use the file path directly (parakeet handles audio loading internally)
+                let result = parakeet
+                    .transcribe_file(audio_path, None)
+                    .map_err(|e| TranscriptionError::LocalTranscriptionFailed(e.to_string()))?;
+                result.text
+            }
+        };
 
         info!("Transcription complete: {} characters", text.len());
         Ok(text)
@@ -145,8 +180,11 @@ impl LocalClient {
         Ok(samples)
     }
 
-    /// Extract transcribed text from all segments.
-    fn extract_text(&self, state: &whisper_rs::WhisperState) -> Result<String, TranscriptionError> {
+    /// Extract transcribed text from all Whisper segments.
+    fn extract_whisper_text(
+        &self,
+        state: &whisper_rs::WhisperState,
+    ) -> Result<String, TranscriptionError> {
         let num_segments = state.full_n_segments().map_err(|e| {
             TranscriptionError::LocalTranscriptionFailed(format!("Failed to get segments: {}", e))
         })?;

@@ -41,7 +41,10 @@ arboard = "3.3"
 enigo = "0.6"
 # Silero VAD - using official implementation directly (no wrapper crate)
 # Based on: https://github.com/snakers4/silero-vad/tree/master/examples/rust-example
-ort = { version = "2.0.0-rc.10", features = ["ndarray"] }
+# Using rc.10 for Intel Mac binary support (rc.11 dropped Intel binaries)
+# Pinned to EXACTLY rc.10 to match parakeet-rs 0.2.7 compatibility
+# NOTE: Use = for exact version to prevent Dependabot from upgrading
+ort = { version = "=2.0.0-rc.10", features = ["copy-dylibs", "download-binaries"] }
 ndarray = "0.16"
 image = "0.25.9"
 derive_more = { version = "2.1.1", features = ["from", "display"] }
@@ -53,6 +56,10 @@ thiserror = "2.0.17"
 strum = { version = "0.27.2", features = ["derive"] }
 # Local transcription - whisper.cpp bindings with Metal acceleration
 whisper-rs = { version = "0.13", features = ["metal"] }
+# Parakeet TDT multilingual transcription via ONNX Runtime
+# Pinned to EXACTLY 0.2.7 (last version before ort rc.11 upgrade) for Intel Mac binary support
+# NOTE: Use = for exact version to prevent Dependabot from upgrading
+parakeet-rs = { version = "=0.2.7", default-features = false, features = ["coreml", "ort-defaults"] }
 # For async model downloads with progress
 futures-util = "0.3"
 # For cancellation tokens in downloads
@@ -67,3 +74,4 @@ objc2-app-kit = { version = "0.3.1", features = ["NSWindow", "NSResponder", "NSR
 objc2-av-foundation = { version = "0.3.1", features = ["AVCaptureDevice", "AVMediaFormat"] }
 objc2 = "0.6"
 block2 = "0.6"  # For Objective-C blocks in callbacks
+
