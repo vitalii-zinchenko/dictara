@@ -10,20 +10,47 @@
     <title>Dictara - AI-Powered Voice to Text</title>
     <meta name="title" content="Dictara - AI-Powered Voice to Text" />
     <meta name="description" content="Typing is slow. Speaking isn't. Free. Bring Your Own Key. Transform your voice into text instantly with Dictara. Powered by OpenAI Whisper, enjoy fast, accurate transcription with a simple press-and-speak interface." />
+    <link rel="canonical" href="https://dictara.app/" />
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://dictara.app/" />
     <meta property="og:title" content="Dictara - AI-Powered Voice to Text" />
     <meta property="og:description" content="Typing is slow. Speaking isn't. Free. Bring Your Own Key. Transform your voice into text instantly with Dictara. Powered by OpenAI Whisper, enjoy fast, accurate transcription with a simple press-and-speak interface." />
-    <meta property="og:image" content="/og-image.png" />
+    <meta property="og:image" content="https://dictara.app/og-image.png" />
+    <meta property="og:site_name" content="Dictara" />
 
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image" />
     <meta property="twitter:url" content="https://dictara.app/" />
     <meta property="twitter:title" content="Dictara - AI-Powered Voice to Text" />
     <meta property="twitter:description" content="Typing is slow. Speaking isn't. Free. Bring Your Own Key. Transform your voice into text instantly with Dictara. Powered by OpenAI Whisper, enjoy fast, accurate transcription with a simple press-and-speak interface." />
-    <meta property="twitter:image" content="/og-image.png" />
+    <meta property="twitter:image" content="https://dictara.app/og-image.png" />
+
+    <!-- Structured Data (JSON-LD) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Dictara",
+      "description": "AI-powered voice to text desktop application. Free, open source, bring your own API key. Powered by OpenAI Whisper for fast, accurate transcription in 90+ languages.",
+      "url": "https://dictara.app",
+      "applicationCategory": "UtilitiesApplication",
+      "operatingSystem": "macOS",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "author": {
+        "@type": "Organization",
+        "name": "Dictara",
+        "url": "https://github.com/vitalii-zinchenko/dictara"
+      },
+      "license": "https://opensource.org/licenses/MIT",
+      "isAccessibleForFree": true
+    }
+    </script>
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -34,7 +61,63 @@
     <meta name="theme-color" content="#0F0A1A" />
   </head>
   <body>
-    <div id="root"></div>
+    <!--
+      Static HTML content for SEO crawlers.
+      React replaces this on mount, so users with JS see the full interactive app.
+    -->
+    <div id="root">
+      <header>
+        <nav>
+          <a href="/">Dictara</a>
+          <a href="https://github.com/vitalii-zinchenko/dictara">GitHub</a>
+        </nav>
+      </header>
+      <main>
+        <section>
+          <h1>Typing is slow. Speaking isn't.</h1>
+          <p>Free · Bring Your Own Key · Speech-to-Text</p>
+          <p>Turn your spoken words into text — in any app, any language.</p>
+          <a href="https://github.com/vitalii-zinchenko/dictara/releases">Download Dictara</a>
+        </section>
+        <section>
+          <h2>Everything you need to dictate</h2>
+          <p>A minimal, focused tool that does one thing exceptionally well — turns your voice into text.</p>
+          <article>
+            <h3>Lightning Fast</h3>
+            <p>Get your transcriptions in seconds. No waiting, no loading screens — just instant results.</p>
+          </article>
+          <article>
+            <h3>90+ Languages</h3>
+            <p>Speak in your native language. Whisper understands and transcribes over 90 languages accurately.</p>
+          </article>
+          <article>
+            <h3>Privacy First</h3>
+            <p>Your audio is recorded locally first. API keys stored securely in your system keychain.</p>
+          </article>
+          <article>
+            <h3>Powered by Whisper</h3>
+            <p>Leveraging OpenAI's state-of-the-art Whisper model for industry-leading accuracy.</p>
+          </article>
+          <article>
+            <h3>Simple Workflow</h3>
+            <p>Hold FN to record, release to transcribe. Or press FN+Space for hands-free dictation.</p>
+          </article>
+          <article>
+            <h3>Auto Paste</h3>
+            <p>Transcribed text is automatically pasted wherever your cursor is. No extra steps needed.</p>
+          </article>
+        </section>
+      </main>
+      <footer>
+        <p>Dictara — Open source under MIT.</p>
+        <nav>
+          <a href="https://github.com/vitalii-zinchenko/dictara">GitHub</a>
+          <a href="https://github.com/vitalii-zinchenko/dictara/releases">Releases</a>
+          <a href="/privacy">Privacy Policy</a>
+          <a href="/terms">Terms of Service</a>
+        </nav>
+      </footer>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
