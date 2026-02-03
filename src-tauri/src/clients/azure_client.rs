@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use secrecy::{ExposeSecret, SecretString};
+
 use super::client::TranscriptionClient;
 use super::error::TranscriptionError;
 
@@ -7,12 +9,12 @@ const AZURE_API_VERSION: &str = "2024-06-01";
 
 /// Azure OpenAI Whisper API client
 pub struct AzureClient {
-    api_key: String,
+    api_key: SecretString,
     endpoint: String,
 }
 
 impl AzureClient {
-    pub fn new(api_key: String, endpoint: String) -> Self {
+    pub fn new(api_key: SecretString, endpoint: String) -> Self {
         Self { api_key, endpoint }
     }
 }
@@ -32,7 +34,7 @@ impl TranscriptionClient for AzureClient {
         &self,
         request: reqwest::blocking::RequestBuilder,
     ) -> reqwest::blocking::RequestBuilder {
-        request.header("api-key", &self.api_key)
+        request.header("api-key", self.api_key.expose_secret())
     }
 
     fn build_form_from_path(

@@ -1,3 +1,5 @@
+use secrecy::SecretString;
+
 use crate::clients::{ApiConfig, Transcriber};
 use crate::config::{OpenAIConfig, Provider};
 use crate::keychain::{self, ProviderAccount};
@@ -42,7 +44,7 @@ pub fn delete_openai_config() -> Result<(), String> {
 pub fn test_openai_config(api_key: String) -> Result<bool, String> {
     let config = ApiConfig {
         provider: Provider::OpenAI,
-        api_key,
+        api_key: SecretString::from(api_key),
         endpoint: String::new(),
     };
 

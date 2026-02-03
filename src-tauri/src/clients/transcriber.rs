@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use log::{error, warn};
+use secrecy::{ExposeSecret, SecretString};
 use tauri::{AppHandle, Manager};
 
 use crate::config::{
@@ -151,14 +152,19 @@ impl Transcriber {
                 let config: OpenAIConfig = keychain::load_provider_config(ProviderAccount::OpenAI)
                     .map_err(|_| TranscriptionError::ApiKeyMissing)?
                     .ok_or(TranscriptionError::ApiKeyMissing)?;
-                Ok(Box::new(OpenAIClient::new(config.api_key)))
+                Ok(Box::new(OpenAIClient::new(SecretString::from(
+                    config.api_key,
+                ))))
             }
             Provider::AzureOpenAI => {
                 let config: AzureOpenAIConfig =
                     keychain::load_provider_config(ProviderAccount::AzureOpenAI)
                         .map_err(|_| TranscriptionError::ApiKeyMissing)?
                         .ok_or(TranscriptionError::ApiKeyMissing)?;
-                Ok(Box::new(AzureClient::new(config.api_key, config.endpoint)))
+                Ok(Box::new(AzureClient::new(
+                    SecretString::from(config.api_key),
+                    config.endpoint,
+                )))
             }
             Provider::Local => Err(TranscriptionError::ApiError(
                 "Local provider doesn't use API client".to_string(),
@@ -201,15 +207,17 @@ impl Transcriber {
     /// Create client from explicit config (for testing credentials).
     fn create_client_from_explicit_config(config: &ApiConfig) -> Box<dyn TranscriptionClient> {
         match config.provider {
-            Provider::OpenAI => Box::new(OpenAIClient::new(config.api_key.clone())),
+            Provider::OpenAI => Box::new(OpenAIClient::new(SecretString::from(
+                config.api_key.expose_secret().to_string(),
+            ))),
             Provider::AzureOpenAI => Box::new(AzureClient::new(
-                config.api_key.clone(),
+                SecretString::from(config.api_key.expose_secret().to_string()),
                 config.endpoint.clone(),
             )),
             Provider::Local => {
                 // Local provider doesn't use API testing - just return OpenAI client
                 // This code path shouldn't be reached for Local provider
-                Box::new(OpenAIClient::new(String::new()))
+                Box::new(OpenAIClient::new(SecretString::from(String::new())))
             }
         }
     }

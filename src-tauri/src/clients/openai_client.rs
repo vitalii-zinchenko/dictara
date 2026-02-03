@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use secrecy::{ExposeSecret, SecretString};
+
 use super::client::TranscriptionClient;
 use super::error::TranscriptionError;
 
@@ -8,11 +10,11 @@ const OPENAI_MODEL: &str = "whisper-1";
 
 /// OpenAI Whisper API client
 pub struct OpenAIClient {
-    api_key: String,
+    api_key: SecretString,
 }
 
 impl OpenAIClient {
-    pub fn new(api_key: String) -> Self {
+    pub fn new(api_key: SecretString) -> Self {
         Self { api_key }
     }
 }
@@ -26,7 +28,7 @@ impl TranscriptionClient for OpenAIClient {
         &self,
         request: reqwest::blocking::RequestBuilder,
     ) -> reqwest::blocking::RequestBuilder {
-        request.bearer_auth(&self.api_key)
+        request.bearer_auth(self.api_key.expose_secret())
     }
 
     fn build_form_from_path(

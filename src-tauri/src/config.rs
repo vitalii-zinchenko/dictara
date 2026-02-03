@@ -251,18 +251,35 @@ impl ConfigKey<ShortcutsConfig> {
 // ===== Keychain-stored Configurations (no keys) =====
 
 /// OpenAI provider configuration (stored in keychain)
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenAIConfig {
     pub api_key: String,
 }
 
+impl std::fmt::Debug for OpenAIConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OpenAIConfig")
+            .field("api_key", &"[REDACTED]")
+            .finish()
+    }
+}
+
 /// Azure OpenAI provider configuration (stored in keychain)
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AzureOpenAIConfig {
     pub api_key: String,
     pub endpoint: String,
+}
+
+impl std::fmt::Debug for AzureOpenAIConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AzureOpenAIConfig")
+            .field("api_key", &"[REDACTED]")
+            .field("endpoint", &self.endpoint)
+            .finish()
+    }
 }
 
 // ===== Type-Safe Config Store =====

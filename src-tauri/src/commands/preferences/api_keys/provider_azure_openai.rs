@@ -1,3 +1,5 @@
+use secrecy::SecretString;
+
 use crate::clients::{ApiConfig, Transcriber};
 use crate::config::{AzureOpenAIConfig, Provider};
 use crate::keychain::{self, ProviderAccount};
@@ -42,7 +44,7 @@ pub fn delete_azure_openai_config() -> Result<(), String> {
 pub fn test_azure_openai_config(api_key: String, endpoint: String) -> Result<bool, String> {
     let config = ApiConfig {
         provider: Provider::AzureOpenAI,
-        api_key,
+        api_key: SecretString::from(api_key),
         endpoint,
     };
 
