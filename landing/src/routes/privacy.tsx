@@ -29,6 +29,15 @@ function PrivacyPage() {
         <p className="text-white/40 mb-12">Last updated: December 2025</p>
 
         <div className="space-y-10 text-white/70 leading-relaxed">
+          <div className="p-6 rounded-xl border border-cool-cyan/20 bg-cool-cyan/5">
+            <p className="text-white/90 font-medium">
+              Dictara's developers never receive your audio, transcriptions, or
+              API keys. All data either stays on your device or flows directly
+              between the app and the transcription provider you choose — we are
+              never in the middle.
+            </p>
+          </div>
+
           <p>
             Dictara is committed to protecting your privacy. This policy
             explains how we handle your data.
@@ -45,8 +54,9 @@ function PrivacyPage() {
               <li>
                 <strong className="text-white/90">Audio Recordings:</strong>{" "}
                 Temporarily stored on your device only during transcription.
-                Audio is sent to your chosen provider (OpenAI or Azure) for
-                processing, then deleted from your device.
+                Audio is sent directly from the app to your chosen provider
+                (OpenAI or Azure) for processing — it never passes through our
+                servers. After transcription, audio is deleted from your device.
               </li>
               <li>
                 <strong className="text-white/90">API Keys:</strong> Stored
@@ -72,8 +82,8 @@ function PrivacyPage() {
               <li>Analytics or telemetry data</li>
               <li>Usage statistics or behavioral data</li>
               <li>Personal information or account data</li>
-              <li>Your transcribed text</li>
-              <li>Any data beyond what's needed for transcription</li>
+              <li>Your transcribed text or audio recordings</li>
+              <li>Any data at all — Dictara has no servers to collect data</li>
             </ul>
           </section>
 
@@ -82,8 +92,9 @@ function PrivacyPage() {
               3. Third-Party Services
             </h2>
             <p className="mb-4">
-              When you use Dictara, your audio is sent to the transcription
-              provider you choose:
+              When you use cloud transcription, audio is sent directly from your
+              device to the provider you choose. Dictara does not operate any
+              servers — there is no intermediary between you and the provider:
             </p>
             <ul className="list-disc list-inside space-y-2 ml-4">
               <li>

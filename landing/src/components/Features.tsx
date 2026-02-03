@@ -27,7 +27,7 @@ const features = [
     icon: IconPrivacy,
     title: "Privacy First",
     description:
-      "Your audio is recorded locally first. API keys stored securely in your system keychain.",
+      "We never receive your audio or transcriptions. Data flows directly between the app and your chosen provider, or stays entirely on your device.",
     gradient: "from-cool-purple to-cool-blue",
   },
   {
