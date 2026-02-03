@@ -12,7 +12,11 @@ import { join } from "path";
 const distDir = join(import.meta.dirname, "..", "dist");
 const indexHtml = readFileSync(join(distDir, "index.html"), "utf-8");
 
-// Route-specific meta tag overrides
+// Extract Vite-generated asset tags from the built index.html
+const cssLinks = indexHtml.match(/<link rel="stylesheet"[^>]+>/g) ?? [];
+const scriptTags = indexHtml.match(/<script type="module"[^>]*>[\s\S]*?<\/script>/g) ?? [];
+
+// Route-specific page definitions
 const routes = [
   {
     path: "privacy",
@@ -53,76 +57,50 @@ const routes = [
 ];
 
 /**
- * Replace meta tags in the HTML template for a specific route.
+ * Build a complete HTML page from a clean template.
  */
-function generatePageHtml(route) {
-  let html = indexHtml;
-
-  // Replace title
-  html = html.replace(
-    /<title>.*?<\/title>/,
-    `<title>${route.title}</title>`
-  );
-  html = html.replace(
-    /<meta name="title" content=".*?" \/>/,
-    `<meta name="title" content="${route.title}" />`
-  );
-
-  // Replace description
-  html = html.replace(
-    /<meta name="description" content=".*?" \/>/,
-    `<meta name="description" content="${route.description}" />`
-  );
-
-  // Replace canonical
-  html = html.replace(
-    /<link rel="canonical" href=".*?" \/>/,
-    `<link rel="canonical" href="${route.canonical}" />`
-  );
-
-  // Replace OG tags
-  html = html.replace(
-    /<meta property="og:url" content=".*?" \/>/,
-    `<meta property="og:url" content="${route.canonical}" />`
-  );
-  html = html.replace(
-    /<meta property="og:title" content=".*?" \/>/,
-    `<meta property="og:title" content="${route.title}" />`
-  );
-  html = html.replace(
-    /<meta property="og:description" content=".*?" \/>/,
-    `<meta property="og:description" content="${route.description}" />`
-  );
-
-  // Replace Twitter tags
-  html = html.replace(
-    /<meta property="twitter:url" content=".*?" \/>/,
-    `<meta property="twitter:url" content="${route.canonical}" />`
-  );
-  html = html.replace(
-    /<meta property="twitter:title" content=".*?" \/>/,
-    `<meta property="twitter:title" content="${route.title}" />`
-  );
-  html = html.replace(
-    /<meta property="twitter:description" content=".*?" \/>/,
-    `<meta property="twitter:description" content="${route.description}" />`
-  );
-
-  // Replace static content in #root
-  html = html.replace(
-    /(<div id="root">)([\s\S]*?)(<\/div>\s*<script)/,
-    `$1${route.staticContent}\n    $3`
-  );
-
-  return html;
+function buildPage({ title, description, canonical, staticContent }) {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/icon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${title}</title>
+    <meta name="title" content="${title}" />
+    <meta name="description" content="${description}" />
+    <link rel="canonical" href="${canonical}" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="${canonical}" />
+    <meta property="og:title" content="${title}" />
+    <meta property="og:description" content="${description}" />
+    <meta property="og:image" content="https://dictara.app/og-image.png" />
+    <meta property="og:site_name" content="Dictara" />
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="${canonical}" />
+    <meta property="twitter:title" content="${title}" />
+    <meta property="twitter:description" content="${description}" />
+    <meta property="twitter:image" content="https://dictara.app/og-image.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <meta name="theme-color" content="#0F0A1A" />
+    ${cssLinks.join("\n    ")}
+  </head>
+  <body>
+    <div id="root">${staticContent}
+    </div>
+    ${scriptTags.join("\n    ")}
+  </body>
+</html>`;
 }
 
 // Generate sub-route pages
 for (const route of routes) {
   const routeDir = join(distDir, route.path);
   mkdirSync(routeDir, { recursive: true });
-  const html = generatePageHtml(route);
-  writeFileSync(join(routeDir, "index.html"), html);
+  writeFileSync(join(routeDir, "index.html"), buildPage(route));
   console.log(`Generated: ${route.path}/index.html`);
 }
 
