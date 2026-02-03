@@ -1,20 +1,13 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import {
-  RouterProvider,
-  createRouter,
-  createHashHistory,
-} from "@tanstack/react-router";
+import { RouterProvider, createRouter } from "@tanstack/react-router";
 import "./index.css";
 
 // Import the generated route tree
 import { routeTree } from "./routeTree.gen";
 
-// Create hash history for GitHub Pages compatibility
-const hashHistory = createHashHistory();
-
-// Create a new router instance
-const router = createRouter({ routeTree, history: hashHistory });
+// Create a new router instance with browser history (default)
+const router = createRouter({ routeTree });
 
 // Register the router instance for type safety
 declare module "@tanstack/react-router" {
@@ -23,13 +16,11 @@ declare module "@tanstack/react-router" {
   }
 }
 
-// Render the app
+// Render the app (replaces any static SEO content in #root)
 const rootElement = document.getElementById("root")!;
-if (!rootElement.innerHTML) {
-  const root = createRoot(rootElement);
-  root.render(
-    <StrictMode>
-      <RouterProvider router={router} />
-    </StrictMode>
-  );
-}
+const root = createRoot(rootElement);
+root.render(
+  <StrictMode>
+    <RouterProvider router={router} />
+  </StrictMode>
+);
