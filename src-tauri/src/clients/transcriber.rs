@@ -152,19 +152,14 @@ impl Transcriber {
                 let config: OpenAIConfig = keychain::load_provider_config(ProviderAccount::OpenAI)
                     .map_err(|_| TranscriptionError::ApiKeyMissing)?
                     .ok_or(TranscriptionError::ApiKeyMissing)?;
-                Ok(Box::new(OpenAIClient::new(SecretString::from(
-                    config.api_key,
-                ))))
+                Ok(Box::new(OpenAIClient::new(config.api_key)))
             }
             Provider::AzureOpenAI => {
                 let config: AzureOpenAIConfig =
                     keychain::load_provider_config(ProviderAccount::AzureOpenAI)
                         .map_err(|_| TranscriptionError::ApiKeyMissing)?
                         .ok_or(TranscriptionError::ApiKeyMissing)?;
-                Ok(Box::new(AzureClient::new(
-                    SecretString::from(config.api_key),
-                    config.endpoint,
-                )))
+                Ok(Box::new(AzureClient::new(config.api_key, config.endpoint)))
             }
             Provider::Local => Err(TranscriptionError::ApiError(
                 "Local provider doesn't use API client".to_string(),

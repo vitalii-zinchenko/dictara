@@ -20,7 +20,10 @@ pub fn load_azure_openai_config() -> Result<Option<AzureOpenAIConfig>, String> {
 #[tauri::command]
 #[specta::specta]
 pub fn save_azure_openai_config(api_key: String, endpoint: String) -> Result<(), String> {
-    let config = AzureOpenAIConfig { api_key, endpoint };
+    let config = AzureOpenAIConfig {
+        api_key: SecretString::from(api_key),
+        endpoint,
+    };
 
     keychain::save_provider_config(ProviderAccount::AzureOpenAI, &config).map_err(|e| {
         let err = format!("Failed to save Azure OpenAI config: {}", e);

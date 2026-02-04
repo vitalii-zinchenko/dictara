@@ -1,3 +1,4 @@
+use secrecy::SecretString;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 /// Provider types supported by the application
@@ -251,10 +252,11 @@ impl ConfigKey<ShortcutsConfig> {
 // ===== Keychain-stored Configurations (no keys) =====
 
 /// OpenAI provider configuration (stored in keychain)
-#[derive(Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenAIConfig {
-    pub api_key: String,
+    #[specta(type = String)]
+    pub api_key: SecretString,
 }
 
 impl std::fmt::Debug for OpenAIConfig {
@@ -266,10 +268,11 @@ impl std::fmt::Debug for OpenAIConfig {
 }
 
 /// Azure OpenAI provider configuration (stored in keychain)
-#[derive(Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AzureOpenAIConfig {
-    pub api_key: String,
+    #[specta(type = String)]
+    pub api_key: SecretString,
     pub endpoint: String,
 }
 
