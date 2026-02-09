@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.1.18",
-    "@tanstack/react-router": "^1.144.0",
+    "@tanstack/react-router": "^1.159.4",
     "@tanstack/router-plugin": "^1.145.7",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
