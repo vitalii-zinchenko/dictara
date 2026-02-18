@@ -46,7 +46,7 @@ enigo = "0.6"
 # Using rc.10 for Intel Mac binary support (rc.11 dropped Intel binaries)
 # Pinned to EXACTLY rc.10 to match parakeet-rs 0.2.7 compatibility
 # NOTE: Use = for exact version to prevent Dependabot from upgrading
-ort = { version = "=2.0.0-rc.10", features = ["copy-dylibs", "download-binaries"] }
+ort = { version = "=2.0.0-rc.11", features = ["copy-dylibs", "download-binaries"] }
 ndarray = "0.16"
 image = "0.25.9"
 derive_more = { version = "2.1.1", features = ["from", "display"] }
