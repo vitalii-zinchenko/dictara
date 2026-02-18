@@ -47,7 +47,7 @@ enigo = "0.6"
 # Pinned to EXACTLY rc.10 to match parakeet-rs 0.2.7 compatibility
 # NOTE: Use = for exact version to prevent Dependabot from upgrading
 ort = { version = "=2.0.0-rc.10", features = ["copy-dylibs", "download-binaries"] }
-ndarray = "0.16"
+ndarray = "0.17"
 image = "0.25.9"
 derive_more = { version = "2.1.1", features = ["from", "display"] }
 keyring = { version = "3", features = ["apple-native"] }
