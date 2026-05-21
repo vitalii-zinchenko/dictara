@@ -2,8 +2,8 @@ use crate::updater::{self, Updater};
 use crate::{
     autolaunch,
     config::{
-        self, AzureOpenAIConfig, ConfigKey, ConfigStore, OnboardingStep, OpenAIConfig, Provider,
-        ShortcutsConfig,
+        self, AzureOpenAIConfig, ConfigKey, ConfigStore, CustomEndpointConfig, OnboardingStep,
+        OpenAIConfig, OpenRouterConfig, Provider, ShortcutsConfig,
     },
     globe_key,
     keyboard_listener::KeyListener,
@@ -128,6 +128,18 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
         }
         Some(Provider::AzureOpenAI) => {
             keychain::load_provider_config::<AzureOpenAIConfig>(ProviderAccount::AzureOpenAI)
+                .ok()
+                .flatten()
+                .is_none()
+        }
+        Some(Provider::OpenRouter) => {
+            keychain::load_provider_config::<OpenRouterConfig>(ProviderAccount::OpenRouter)
+                .ok()
+                .flatten()
+                .is_none()
+        }
+        Some(Provider::CustomEndpoint) => {
+            keychain::load_provider_config::<CustomEndpointConfig>(ProviderAccount::CustomEndpoint)
                 .ok()
                 .flatten()
                 .is_none()

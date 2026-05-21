@@ -1,6 +1,8 @@
 import { OpenAIProvider } from './OpenAiProvider'
 import { AzureOpenAIProvider } from './AzureProvider'
 import { LocalProvider } from './LocalProvider'
+import { OpenRouterProvider } from './OpenRouterProvider'
+import { CustomEndpointProvider } from './CustomEndpointProvider'
 import type { Provider } from './types'
 
 interface ProviderListProps {
@@ -39,6 +41,20 @@ export function ProviderList({
       <LocalProvider
         isExpanded={expandedSection === 'local'}
         isActive={activeProvider === 'local'}
+        onToggleExpand={onToggleExpand}
+        onToggleActive={onToggleActive}
+      />
+
+      <OpenRouterProvider
+        isExpanded={expandedSection === 'open_router'}
+        isActive={activeProvider === 'open_router'}
+        onToggleExpand={onToggleExpand}
+        onToggleActive={onToggleActive}
+      />
+
+      <CustomEndpointProvider
+        isExpanded={expandedSection === 'custom_endpoint'}
+        isActive={activeProvider === 'custom_endpoint'}
         onToggleExpand={onToggleExpand}
         onToggleActive={onToggleActive}
       />

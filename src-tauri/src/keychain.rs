@@ -14,6 +14,8 @@ const BUNDLE: &str = "app.dictara";
 pub enum ProviderAccount {
     OpenAI,
     AzureOpenAI,
+    OpenRouter,
+    CustomEndpoint,
 }
 
 /// Save provider configuration as JSON to keychain

@@ -30,6 +30,16 @@ macro_rules! with_commands {
             $crate::commands::save_azure_openai_config,
             $crate::commands::delete_azure_openai_config,
             $crate::commands::test_azure_openai_config,
+            // OpenRouter provider
+            $crate::commands::load_openrouter_config,
+            $crate::commands::save_openrouter_config,
+            $crate::commands::delete_openrouter_config,
+            $crate::commands::test_openrouter_config,
+            // Custom Endpoint provider
+            $crate::commands::load_custom_endpoint_config,
+            $crate::commands::save_custom_endpoint_config,
+            $crate::commands::delete_custom_endpoint_config,
+            $crate::commands::test_custom_endpoint_config,
             // Local model provider
             $crate::commands::get_available_models,
             $crate::commands::download_model,

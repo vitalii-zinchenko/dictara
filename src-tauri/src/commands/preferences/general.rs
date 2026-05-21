@@ -1,4 +1,6 @@
-use crate::config::{self, AppConfig, ConfigKey, ConfigStore, Provider, RecordingTrigger};
+use crate::config::{
+    self, AppConfig, AudioFormat, ConfigKey, ConfigStore, Provider, RecordingTrigger,
+};
 use log::error;
 use tauri::State;
 
@@ -18,6 +20,7 @@ pub fn save_app_config(
     config_store: State<config::Config>,
     active_provider: Option<String>,
     recording_trigger: Option<RecordingTrigger>,
+    audio_format: Option<AudioFormat>,
 ) -> Result<(), String> {
     // Load existing config to preserve fields that aren't being updated
     let mut config = config_store.get(&ConfigKey::APP).unwrap_or_default();
@@ -28,6 +31,8 @@ pub fn save_app_config(
             "open_ai" | "openai" => Provider::OpenAI,
             "azure_open_ai" | "azure_openai" | "azure" => Provider::AzureOpenAI,
             "local" => Provider::Local,
+            "open_router" | "openrouter" => Provider::OpenRouter,
+            "custom_endpoint" | "custom_url" | "customEndpoint" => Provider::CustomEndpoint,
             _ => {
                 error!("Invalid provider: {}", p);
                 return Err(format!("Invalid provider: {}", p));
@@ -38,6 +43,11 @@ pub fn save_app_config(
     // Update recording trigger if specified
     if let Some(trigger) = recording_trigger {
         config.recording_trigger = trigger;
+    }
+
+    // Update audio format if specified
+    if let Some(format) = audio_format {
+        config.audio_format = format;
     }
 
     config_store.set(&ConfigKey::APP, config)
