@@ -29,6 +29,8 @@ pub fn set_current_provider(
         "open_ai" | "openai" => Provider::OpenAI,
         "azure_open_ai" | "azure_openai" | "azure" => Provider::AzureOpenAI,
         "local" => Provider::Local,
+        "open_router" | "openrouter" => Provider::OpenRouter,
+        "custom_endpoint" | "custom_url" | "customEndpoint" => Provider::CustomEndpoint,
         _ => {
             error!("Invalid provider: {}", provider);
             return Err(format!("Invalid provider: {}", provider));
