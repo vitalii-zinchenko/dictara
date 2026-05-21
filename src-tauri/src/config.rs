@@ -14,6 +14,10 @@ pub enum Provider {
     AzureOpenAI,
     #[serde(rename = "local")]
     Local,
+    #[serde(rename = "open_router", alias = "openrouter")]
+    OpenRouter,
+    #[serde(rename = "custom_endpoint", alias = "customEndpoint")]
+    CustomEndpoint,
 }
 
 /// Recording trigger key options
@@ -140,6 +144,15 @@ impl<T> ConfigKey<T> {
     }
 }
 
+/// Audio format options for transmission
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum AudioFormat {
+    #[default]
+    Wav,
+    Mp3,
+}
+
 // ===== App Configuration =====
 
 /// App configuration (stored locally)
@@ -156,6 +169,9 @@ pub struct AppConfig {
     /// This prevents re-enabling autostart after user manually disables it
     #[serde(default)]
     pub autostart_initial_setup_done: bool,
+    /// Audio format for transcription transmission (Wav or Mp3)
+    #[serde(default, alias = "audio_format")]
+    pub audio_format: AudioFormat,
 }
 
 impl ConfigKey<AppConfig> {
@@ -278,6 +294,42 @@ impl std::fmt::Debug for AzureOpenAIConfig {
         f.debug_struct("AzureOpenAIConfig")
             .field("api_key", &"[REDACTED]")
             .field("endpoint", &self.endpoint)
+            .finish()
+    }
+}
+
+/// OpenRouter provider configuration (stored in keychain)
+#[derive(Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenRouterConfig {
+    pub api_key: String,
+    pub model: String,
+}
+
+impl std::fmt::Debug for OpenRouterConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OpenRouterConfig")
+            .field("api_key", &"[REDACTED]")
+            .field("model", &self.model)
+            .finish()
+    }
+}
+
+/// Custom Endpoint provider configuration (stored in keychain)
+#[derive(Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomEndpointConfig {
+    pub api_key: Option<String>,
+    pub base_url: String,
+    pub model: String,
+}
+
+impl std::fmt::Debug for CustomEndpointConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CustomEndpointConfig")
+            .field("api_key", &"[REDACTED]")
+            .field("base_url", &self.base_url)
+            .field("model", &self.model)
             .finish()
     }
 }
@@ -414,6 +466,7 @@ mod tests {
                 active_provider: Some(Provider::OpenAI),
                 recording_trigger: RecordingTrigger::Control,
                 autostart_initial_setup_done: false,
+                audio_format: AudioFormat::Wav,
             },
         )];
 
