@@ -52,9 +52,9 @@ async loadAppConfig() : Promise<Result<AppConfig, string>> {
 /**
  * Save app configuration (general-purpose command that can update multiple fields)
  */
-async saveAppConfig(activeProvider: string | null, recordingTrigger: RecordingTrigger | null) : Promise<Result<null, string>> {
+async saveAppConfig(activeProvider: string | null, recordingTrigger: RecordingTrigger | null, audioFormat: AudioFormat | null) : Promise<Result<null, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("save_app_config", { activeProvider, recordingTrigger }) };
+    return { status: "ok", data: await TAURI_INVOKE("save_app_config", { activeProvider, recordingTrigger, audioFormat }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -152,6 +152,70 @@ async deleteAzureOpenaiConfig() : Promise<Result<null, string>> {
 async testAzureOpenaiConfig(apiKey: string, endpoint: string) : Promise<Result<boolean, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("test_azure_openai_config", { apiKey, endpoint }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async loadOpenrouterConfig() : Promise<Result<OpenRouterConfigStatus | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("load_openrouter_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async saveOpenrouterConfig(apiKey: string, model: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("save_openrouter_config", { apiKey, model }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async deleteOpenrouterConfig() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_openrouter_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async testOpenrouterConfig(apiKey: string, model: string) : Promise<Result<boolean, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("test_openrouter_config", { apiKey, model }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async loadCustomEndpointConfig() : Promise<Result<CustomEndpointConfigStatus | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("load_custom_endpoint_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async saveCustomEndpointConfig(apiKey: string | null, baseUrl: string, model: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("save_custom_endpoint_config", { apiKey, baseUrl, model }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async deleteCustomEndpointConfig() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_custom_endpoint_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async testCustomEndpointConfig(apiKey: string | null, baseUrl: string, model: string) : Promise<Result<boolean, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("test_custom_endpoint_config", { apiKey, baseUrl, model }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -486,11 +550,23 @@ recordingTrigger?: RecordingTrigger;
  * Whether autostart has been set up on first launch
  * This prevents re-enabling autostart after user manually disables it
  */
-autostartInitialSetupDone?: boolean }
+autostartInitialSetupDone?: boolean; 
+/**
+ * Audio format for transcription transmission (Wav or Mp3)
+ */
+audioFormat?: AudioFormat }
+/**
+ * Audio format options for transmission
+ */
+export type AudioFormat = "wav" | "mp3"
 /**
  * Frontend-facing status for Azure OpenAI provider (never exposes API key)
  */
 export type AzureOpenAIConfigStatus = { configured: boolean; endpoint: string }
+/**
+ * Frontend-facing status for Custom Endpoint provider (never exposes API key)
+ */
+export type CustomEndpointConfigStatus = { configured: boolean; baseUrl: string; model: string; hasApiKey: boolean }
 /**
  * Key capture event - streamed to frontend during shortcut configuration
  */
@@ -576,9 +652,13 @@ export type OnboardingStep = "welcome" | "accessibility" | "microphone" | "api_k
  */
 export type OpenAIConfigStatus = { configured: boolean }
 /**
+ * Frontend-facing status for OpenRouter provider (never exposes API key)
+ */
+export type OpenRouterConfigStatus = { configured: boolean; model: string }
+/**
  * Provider types supported by the application
  */
-export type Provider = "open_ai" | "azure_open_ai" | "local"
+export type Provider = "open_ai" | "azure_open_ai" | "local" | "open_router" | "custom_endpoint"
 /**
  * Recording state change event - single event stream for all state transitions
  */
