@@ -33,7 +33,6 @@ log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dictara-keyboard = { path = "../crates/keyboard" }
-macos-accessibility-client = "0.0.1"
 cpal = "0.15"
 hound = "3.5"
 rubato = "0.16"
@@ -56,12 +55,13 @@ tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"] }
 specta-typescript = "0.0.9"
 thiserror = "2.0.17"
 strum = { version = "0.27.2", features = ["derive"] }
-# Local transcription - whisper.cpp bindings with Metal acceleration
-whisper-rs = { version = "0.13", features = ["metal"] }
+# Local transcription - whisper.cpp bindings (Metal acceleration added for macOS below)
+whisper-rs = { version = "0.13", default-features = false }
 # Parakeet TDT multilingual transcription via ONNX Runtime
 # Pinned to EXACTLY 0.2.7 (last version before ort rc.11 upgrade) for Intel Mac binary support
 # NOTE: Use = for exact version to prevent Dependabot from upgrading
-parakeet-rs = { version = "=0.2.7", default-features = false, features = ["coreml", "ort-defaults"] }
+# CoreML acceleration added for macOS below
+parakeet-rs = { version = "=0.2.7", default-features = false, features = ["ort-defaults"] }
 # For async model downloads with progress
 futures-util = "0.3"
 # For cancellation tokens in downloads
@@ -77,4 +77,8 @@ objc2-app-kit = { version = "0.3.1", features = ["NSWindow", "NSResponder", "NSR
 objc2-av-foundation = { version = "0.3.1", features = ["AVCaptureDevice", "AVMediaFormat"] }
 objc2 = "0.6"
 block2 = "0.6"  # For Objective-C blocks in callbacks
+macos-accessibility-client = "0.0.1"
+# Metal/CoreML acceleration, macOS-only
+whisper-rs = { version = "0.13", features = ["metal"] }
+parakeet-rs = { version = "=0.2.7", features = ["coreml"] }
 
