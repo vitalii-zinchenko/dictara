@@ -9,10 +9,13 @@
 //! - 2: Show Emoji & Symbols (default on most Macs)
 //! - 3: Start Dictation
 
+#[cfg(target_os = "macos")]
 use log::{info, warn};
+#[cfg(target_os = "macos")]
 use std::process::Command;
 
 /// Globe key behavior options
+#[cfg(target_os = "macos")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum GlobeKeyBehavior {
@@ -26,6 +29,7 @@ pub enum GlobeKeyBehavior {
     StartDictation = 3,
 }
 
+#[cfg(target_os = "macos")]
 impl GlobeKeyBehavior {
     /// Convert from integer value
     fn from_i32(value: i32) -> Option<Self> {
@@ -132,23 +136,16 @@ pub fn fix_globe_key_if_needed() -> bool {
     }
 }
 
-// Stub implementations for non-macOS platforms
-#[cfg(not(target_os = "macos"))]
-pub fn get_globe_key_behavior() -> Option<GlobeKeyBehavior> {
-    None
-}
-
-#[cfg(not(target_os = "macos"))]
-pub fn set_globe_key_behavior(_behavior: GlobeKeyBehavior) -> Result<(), String> {
-    Ok(())
-}
-
+// Stub implementation for non-macOS platforms.
+// get_globe_key_behavior/set_globe_key_behavior are macOS-only implementation
+// details (no caller outside this module needs them on other platforms), so
+// only the externally-called fix_globe_key_if_needed needs a stub here.
 #[cfg(not(target_os = "macos"))]
 pub fn fix_globe_key_if_needed() -> bool {
     false
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "macos"))]
 mod tests {
     use super::*;
 
