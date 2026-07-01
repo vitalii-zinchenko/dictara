@@ -1,3 +1,4 @@
+#[cfg(target_os = "macos")]
 use tauri_plugin_opener::OpenerExt;
 
 // ===== MICROPHONE PERMISSION COMMANDS =====
@@ -74,6 +75,7 @@ pub async fn request_microphone_permission() -> bool {
 /// Open System Settings to the Microphone privacy pane
 #[tauri::command]
 #[specta::specta]
+#[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
 pub fn open_microphone_settings(app: tauri::AppHandle) {
     #[cfg(target_os = "macos")]
     {

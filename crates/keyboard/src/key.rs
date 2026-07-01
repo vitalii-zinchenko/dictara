@@ -178,10 +178,20 @@ pub enum Key {
 }
 
 impl Key {
-    /// Convert a macOS keycode to a Key.
+    /// Convert a stable, platform-independent code back to a `Key`.
+    ///
+    /// This is the inverse of [`Key::to_code`] and is used to decode
+    /// persisted/serialized shortcut configuration. See that function's
+    /// docs for why these numbers must never be reordered or reused.
+    ///
+    /// Only used by the macOS backend today (to decode raw CGEvent
+    /// keycodes, which share this crate's numbering); cfg-gated to avoid a
+    /// dead-code warning elsewhere until a Linux backend needs it too.
     #[cfg(target_os = "macos")]
-    pub(crate) fn from_macos_keycode(code: u32) -> Self {
-        // Keycodes from <HIToolbox/Events.h>
+    pub(crate) fn from_code(code: u32) -> Self {
+        // Numbering originates from macOS keycodes (<HIToolbox/Events.h>),
+        // since macOS was the first platform this crate supported and these
+        // values are already persisted in shipped user configs.
         match code {
             0 => Key::KeyA,
             1 => Key::KeyS,
@@ -305,9 +315,16 @@ impl Key {
         }
     }
 
-    /// Convert a Key to macOS keycode
-    #[cfg(target_os = "macos")]
-    pub fn to_macos_keycode(&self) -> u32 {
+    /// Stable, platform-independent numeric code for this key.
+    ///
+    /// This is **not** an OS keycode space — it's a hand-assigned wire
+    /// format used for persisting shortcut configuration (`ShortcutsConfig`)
+    /// and for the capture-mode IPC events sent to the frontend. The numbers
+    /// happen to match macOS's virtual keycodes today (macOS was the first
+    /// supported platform), but must be treated as an opaque, stable ID:
+    /// never reorder or reuse a number, since doing so would silently
+    /// corrupt already-persisted user configs.
+    pub fn to_code(&self) -> u32 {
         match self {
             Key::KeyA => 0,
             Key::KeyS => 1,

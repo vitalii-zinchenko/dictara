@@ -96,18 +96,18 @@ impl Default for ShortcutsConfig {
         Self {
             push_to_record: Shortcut {
                 keys: vec![ShortcutKey {
-                    keycode: fn_key.to_macos_keycode(),
+                    keycode: fn_key.to_code(),
                     label: fn_key.to_label(),
                 }],
             },
             hands_free: Shortcut {
                 keys: vec![
                     ShortcutKey {
-                        keycode: fn_key.to_macos_keycode(),
+                        keycode: fn_key.to_code(),
                         label: fn_key.to_label(),
                     },
                     ShortcutKey {
-                        keycode: space_key.to_macos_keycode(),
+                        keycode: space_key.to_code(),
                         label: space_key.to_label(),
                     },
                 ],
@@ -339,7 +339,7 @@ pub fn migrate_trigger_to_shortcuts(store: &impl ConfigStore) -> Result<(), Stri
     // Convert old trigger to key, then to keycode and label
     let key = app_config.recording_trigger.to_key();
     let trigger_key = ShortcutKey {
-        keycode: key.to_macos_keycode(),
+        keycode: key.to_code(),
         label: key.to_label(),
     };
 
@@ -353,7 +353,7 @@ pub fn migrate_trigger_to_shortcuts(store: &impl ConfigStore) -> Result<(), Stri
             keys: vec![
                 trigger_key,
                 ShortcutKey {
-                    keycode: space_key.to_macos_keycode(),
+                    keycode: space_key.to_code(),
                     label: space_key.to_label(),
                 },
             ],

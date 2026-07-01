@@ -1,9 +1,10 @@
+#[cfg(target_os = "macos")]
+use crate::config::OnboardingStep;
 use crate::updater::{self, Updater};
 use crate::{
     autolaunch,
     config::{
-        self, AzureOpenAIConfig, ConfigKey, ConfigStore, OnboardingStep, OpenAIConfig, Provider,
-        ShortcutsConfig,
+        self, AzureOpenAIConfig, ConfigKey, ConfigStore, OpenAIConfig, Provider, ShortcutsConfig,
     },
     globe_key,
     keyboard_listener::KeyListener,

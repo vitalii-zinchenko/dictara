@@ -108,7 +108,7 @@ impl KeyListener {
     ) -> Option<Event> {
         match event.event_type {
             EventType::KeyPress(key) => {
-                let keycode = key.to_macos_keycode();
+                let keycode = key.to_code();
 
                 // Check if shortcut was matched BEFORE inserting new key (rising edge detection)
                 let was_push_to_record = shortcuts.push_to_record.matches(pressed_keys);
@@ -152,7 +152,7 @@ impl KeyListener {
                 Some(event)
             }
             EventType::KeyRelease(key) => {
-                let keycode = key.to_macos_keycode();
+                let keycode = key.to_code();
 
                 // Check push-to-record BEFORE removing key
                 let was_push_to_record = shortcuts.push_to_record.matches(pressed_keys);
@@ -173,12 +173,12 @@ impl KeyListener {
     fn handle_capture_mode(event: Event, app_handle: &AppHandle) -> Option<Event> {
         match event.event_type {
             EventType::KeyPress(key) => {
-                let keycode = key.to_macos_keycode();
+                let keycode = key.to_code();
                 let label = key.to_label();
                 let _ = KeyCaptureEvent::KeyDown { keycode, label }.emit(app_handle);
             }
             EventType::KeyRelease(key) => {
-                let keycode = key.to_macos_keycode();
+                let keycode = key.to_code();
                 let label = key.to_label();
                 let _ = KeyCaptureEvent::KeyUp { keycode, label }.emit(app_handle);
             }

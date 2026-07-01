@@ -212,7 +212,7 @@ unsafe extern "C-unwind" fn event_tap_callback(
     // Get the keycode
     let keycode =
         CGEvent::integer_value_field(Some(cg_event.as_ref()), CGEventField::KeyboardEventKeycode);
-    let key = Key::from_macos_keycode(keycode as u32);
+    let key = Key::from_code(keycode as u32);
 
     // Filter out unknown/undocumented keys (e.g., keycode 179 after quick Fn tap)
     // These are typically synthetic system events that shouldn't be captured
