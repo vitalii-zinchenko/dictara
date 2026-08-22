@@ -101,9 +101,16 @@ async loadOpenaiConfig() : Promise<Result<OpenAIConfigStatus | null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async saveOpenaiConfig(apiKey: string) : Promise<Result<null, string>> {
+/**
+ * Save the OpenAI configuration.
+ * 
+ * `api_key` is optional: when omitted, the already-stored key is kept so the
+ * model can be changed without the user re-entering their key. The stored key
+ * is never returned to the frontend.
+ */
+async saveOpenaiConfig(apiKey: string | null, model: OpenAITranscriptionModel) : Promise<Result<null, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("save_openai_config", { apiKey }) };
+    return { status: "ok", data: await TAURI_INVOKE("save_openai_config", { apiKey, model }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -117,6 +124,16 @@ async deleteOpenaiConfig() : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * Verify that an API key is accepted by OpenAI.
+ * 
+ * This checks the credential, not the model: the probe sends a 1-second
+ * silent clip, which the GPT-based transcription models reject outright
+ * (and which gives the diarization model's VAD nothing to chunk). Whisper
+ * accepts it, so it is always used here regardless of the selected model.
+ * Authorization is account-wide, so a key valid for Whisper is valid for
+ * every transcription model.
+ */
 async testOpenaiConfig(apiKey: string) : Promise<Result<boolean, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("test_openai_config", { apiKey }) };
@@ -574,7 +591,22 @@ export type OnboardingStep = "welcome" | "accessibility" | "microphone" | "api_k
 /**
  * Frontend-facing status for OpenAI provider (never exposes API key)
  */
-export type OpenAIConfigStatus = { configured: boolean }
+export type OpenAIConfigStatus = { configured: boolean; 
+/**
+ * Currently selected transcription model (never includes the API key)
+ */
+model: OpenAITranscriptionModel }
+/**
+ * File-based OpenAI transcription models supported by `/v1/audio/transcriptions`.
+ * 
+ * Realtime/live transcription models are intentionally not included.
+ */
+export type OpenAITranscriptionModel = "gpt-transcribe" | "gpt-4o-transcribe" | "gpt-4o-mini-transcribe" | "gpt-4o-transcribe-diarize" | 
+/**
+ * Default for backwards compatibility with configs saved before the
+ * model became selectable.
+ */
+"whisper-1"
 /**
  * Provider types supported by the application
  */

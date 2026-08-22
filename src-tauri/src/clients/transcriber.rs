@@ -6,7 +6,8 @@ use secrecy::{ExposeSecret, SecretString};
 use tauri::{AppHandle, Manager};
 
 use crate::config::{
-    self, AzureOpenAIConfig, ConfigKey, ConfigStore, LocalModelConfig, OpenAIConfig, Provider,
+    self, AzureOpenAIConfig, ConfigKey, ConfigStore, LocalModelConfig, OpenAIConfig,
+    OpenAITranscriptionModel, Provider,
 };
 use crate::keychain::{self, ProviderAccount};
 use crate::models::{is_model_in_catalog, ModelLoader, ModelManager};
@@ -152,9 +153,10 @@ impl Transcriber {
                 let config: OpenAIConfig = keychain::load_provider_config(ProviderAccount::OpenAI)
                     .map_err(|_| TranscriptionError::ApiKeyMissing)?
                     .ok_or(TranscriptionError::ApiKeyMissing)?;
-                Ok(Box::new(OpenAIClient::new(SecretString::from(
-                    config.api_key,
-                ))))
+                Ok(Box::new(OpenAIClient::new(
+                    SecretString::from(config.api_key),
+                    config.model,
+                )))
             }
             Provider::AzureOpenAI => {
                 let config: AzureOpenAIConfig =
@@ -207,9 +209,10 @@ impl Transcriber {
     /// Create client from explicit config (for testing credentials).
     fn create_client_from_explicit_config(config: &ApiConfig) -> Box<dyn TranscriptionClient> {
         match config.provider {
-            Provider::OpenAI => Box::new(OpenAIClient::new(SecretString::from(
-                config.api_key.expose_secret().to_owned(),
-            ))),
+            Provider::OpenAI => Box::new(OpenAIClient::new(
+                SecretString::from(config.api_key.expose_secret().to_owned()),
+                config.openai_model,
+            )),
             Provider::AzureOpenAI => Box::new(AzureClient::new(
                 SecretString::from(config.api_key.expose_secret().to_owned()),
                 config.endpoint.clone(),
@@ -217,7 +220,10 @@ impl Transcriber {
             Provider::Local => {
                 // Local provider doesn't use API testing - just return OpenAI client
                 // This code path shouldn't be reached for Local provider
-                Box::new(OpenAIClient::new(SecretString::from(String::new())))
+                Box::new(OpenAIClient::new(
+                    SecretString::from(String::new()),
+                    OpenAITranscriptionModel::default(),
+                ))
             }
         }
     }

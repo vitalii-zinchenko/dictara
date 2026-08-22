@@ -61,6 +61,7 @@ pub fn test_azure_openai_config(api_key: String, endpoint: String) -> Result<boo
         provider: Provider::AzureOpenAI,
         api_key: SecretString::from(api_key),
         endpoint,
+        openai_model: crate::config::OpenAITranscriptionModel::default(),
     };
 
     Transcriber::test_api_key(&config).map_err(|e| {

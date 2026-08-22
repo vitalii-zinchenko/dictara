@@ -6,12 +6,15 @@ import {
 } from '@/hooks/useOpenAIConfig'
 import { waitForPaint } from '@/utils/waitForPaint'
 import { useForm } from '@tanstack/react-form'
+import type { OpenAITranscriptionModel } from '@/bindings'
 import { error as logError } from '@tauri-apps/plugin-log'
 import { Loader2 } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
 import { Label } from '../../ui/label'
+import { OpenAIModelSelector } from './OpenAIModelSelector'
+import { DEFAULT_OPENAI_MODEL } from './openaiModels'
 import { ProviderSection } from './ProviderSection'
 import type { Provider } from './types'
 import { MASKED_API_KEY_PLACEHOLDER } from './utils'
@@ -37,6 +40,12 @@ export function OpenAIProvider({
   const testConfig = useTestOpenAIConfig()
   const deleteConfig = useDeleteOpenAIConfig()
 
+  // Pending model selection, only set while the user is changing it. Falls back
+  // to the persisted model so the selector always shows what is saved.
+  const [pendingModel, setPendingModel] = useState<OpenAITranscriptionModel | null>(null)
+  const savedModel = existingConfig?.model ?? DEFAULT_OPENAI_MODEL
+  const selectedModel = pendingModel ?? savedModel
+
   const form = useForm({
     defaultValues: {
       apiKey: '',
@@ -48,9 +57,7 @@ export function OpenAIProvider({
         await waitForPaint()
 
         try {
-          const isValid = await testConfig.mutateAsync({
-            apiKey: value.apiKey,
-          })
+          const isValid = await testConfig.mutateAsync({ apiKey: value.apiKey })
 
           if (!isValid) {
             return {
@@ -73,8 +80,9 @@ export function OpenAIProvider({
       setSaveSuccess(false)
 
       try {
-        await saveConfig.mutateAsync({ apiKey: value.apiKey })
+        await saveConfig.mutateAsync({ apiKey: value.apiKey, model: selectedModel })
         setSaveSuccess(true)
+        setPendingModel(null)
         form.reset()
         // Auto-enable the provider after successful save
         if (!isActive) {
@@ -90,6 +98,7 @@ export function OpenAIProvider({
     try {
       await deleteConfig.mutateAsync()
       setSaveSuccess(false)
+      setPendingModel(null)
       form.reset()
       // Deactivate the provider if it was active
       if (isActive) {
@@ -99,6 +108,27 @@ export function OpenAIProvider({
       logError(`[OpenAIProvider] Failed to delete config: ${e}`)
     }
   }
+
+  // With a key already stored, the model can be changed on its own - the
+  // backend keeps the stored key, which is never sent to the frontend.
+  const handleSaveModelOnly = async () => {
+    setSaveSuccess(false)
+
+    try {
+      await saveConfig.mutateAsync({ model: selectedModel })
+      setSaveSuccess(true)
+      setPendingModel(null)
+    } catch (e) {
+      logError(`[OpenAIProvider] Failed to save model: ${e}`)
+    }
+  }
+
+  const handleSelectModel = (model: OpenAITranscriptionModel) => {
+    setPendingModel(model)
+    setSaveSuccess(false)
+  }
+
+  const hasUnsavedModelChange = !!existingConfig && selectedModel !== savedModel
 
   // Derive error message from mutations
   const errorMessage = saveConfig.error?.message || deleteConfig.error?.message
@@ -187,6 +217,17 @@ export function OpenAIProvider({
           </form.Field>
         </div>
 
+        {/* Model selection - saved together with the key, or on its own */}
+        <form.Subscribe selector={(state) => state.isSubmitting}>
+          {(isSubmitting) => (
+            <OpenAIModelSelector
+              value={selectedModel}
+              onChange={handleSelectModel}
+              disabled={isSubmitting || saveConfig.isPending}
+            />
+          )}
+        </form.Subscribe>
+
         {/* Feedback messages */}
         <form.Subscribe selector={(state) => state.errorMap}>
           {(errorMap) => (
@@ -203,7 +244,7 @@ export function OpenAIProvider({
           <form.Subscribe
             selector={(state) => [state.canSubmit, state.isSubmitting]}
             children={([canSubmit, isSubmitting]) => (
-              <Button type="submit" disabled={!canSubmit}>
+              <Button type="submit" disabled={!canSubmit || saveConfig.isPending}>
                 {isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -215,6 +256,28 @@ export function OpenAIProvider({
               </Button>
             )}
           />
+
+          {hasUnsavedModelChange && (
+            <form.Subscribe selector={(state) => state.isSubmitting}>
+              {(isSubmitting) => (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleSaveModelOnly}
+                  disabled={isSubmitting || saveConfig.isPending}
+                >
+                  {saveConfig.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    'Save Model'
+                  )}
+                </Button>
+              )}
+            </form.Subscribe>
+          )}
         </div>
       </form>
     </ProviderSection>
