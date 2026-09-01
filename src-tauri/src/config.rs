@@ -250,17 +250,83 @@ impl ConfigKey<ShortcutsConfig> {
 
 // ===== Keychain-stored Configurations (no keys) =====
 
+/// File-based OpenAI transcription models supported by `/v1/audio/transcriptions`.
+///
+/// Realtime/live transcription models are intentionally not included.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default, specta::Type)]
+pub enum OpenAITranscriptionModel {
+    #[serde(rename = "gpt-transcribe")]
+    GptTranscribe,
+    #[serde(rename = "gpt-4o-transcribe")]
+    Gpt4oTranscribe,
+    #[serde(rename = "gpt-4o-mini-transcribe")]
+    Gpt4oMiniTranscribe,
+    #[serde(rename = "gpt-4o-transcribe-diarize")]
+    Gpt4oTranscribeDiarize,
+    /// Default for backwards compatibility with configs saved before the
+    /// model became selectable.
+    #[default]
+    #[serde(rename = "whisper-1")]
+    Whisper1,
+}
+
+impl OpenAITranscriptionModel {
+    /// The model id as accepted by the OpenAI API.
+    pub fn as_api_id(self) -> &'static str {
+        match self {
+            Self::GptTranscribe => "gpt-transcribe",
+            Self::Gpt4oTranscribe => "gpt-4o-transcribe",
+            Self::Gpt4oMiniTranscribe => "gpt-4o-mini-transcribe",
+            Self::Gpt4oTranscribeDiarize => "gpt-4o-transcribe-diarize",
+            Self::Whisper1 => "whisper-1",
+        }
+    }
+
+    /// `response_format` to request for this model.
+    ///
+    /// `gpt-4o-transcribe-diarize` only produces speaker annotations with
+    /// `diarized_json`; every other supported model accepts plain `json`.
+    /// Both response shapes carry a top-level `text` field.
+    pub fn response_format(self) -> &'static str {
+        match self {
+            Self::Gpt4oTranscribeDiarize => "diarized_json",
+            _ => "json",
+        }
+    }
+
+    /// Whether the model accepts the `temperature` parameter.
+    ///
+    /// Only the Whisper model documents sampling temperature; the GPT-based
+    /// transcription models do not, so it must not be sent for them.
+    pub fn supports_temperature(self) -> bool {
+        matches!(self, Self::Whisper1)
+    }
+
+    /// Whether a `chunking_strategy` must be sent.
+    ///
+    /// Required by `gpt-4o-transcribe-diarize` for audio longer than 30
+    /// seconds, and harmless for shorter clips, so it is always sent.
+    pub fn requires_chunking_strategy(self) -> bool {
+        matches!(self, Self::Gpt4oTranscribeDiarize)
+    }
+}
+
 /// OpenAI provider configuration (stored in keychain)
 #[derive(Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenAIConfig {
     pub api_key: String,
+    /// Selected transcription model. Missing in configs written before model
+    /// selection existed, which fall back to `whisper-1`.
+    #[serde(default)]
+    pub model: OpenAITranscriptionModel,
 }
 
 impl std::fmt::Debug for OpenAIConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OpenAIConfig")
             .field("api_key", &"[REDACTED]")
+            .field("model", &self.model)
             .finish()
     }
 }
@@ -467,6 +533,105 @@ mod tests {
         for (description, key, config) in test_cases {
             let store = MockConfigStore::new();
             test_config_lifecycle(&store, &key, config, description);
+        }
+    }
+
+    #[test]
+    fn test_openai_config_without_model_falls_back_to_whisper() {
+        // Configs written before model selection existed only contain the key.
+        let legacy = r#"{"apiKey":"sk-legacy"}"#;
+        let config: OpenAIConfig = serde_json::from_str(legacy).expect("legacy config must load");
+
+        assert_eq!(config.api_key, "sk-legacy");
+        assert_eq!(config.model, OpenAITranscriptionModel::Whisper1);
+        assert_eq!(config.model.as_api_id(), "whisper-1");
+    }
+
+    #[test]
+    fn test_openai_config_roundtrip_preserves_model() {
+        let config = OpenAIConfig {
+            api_key: "sk-test".to_string(),
+            model: OpenAITranscriptionModel::Gpt4oMiniTranscribe,
+        };
+
+        let json = serde_json::to_string(&config).expect("serialize");
+        assert!(
+            json.contains(r#""model":"gpt-4o-mini-transcribe""#),
+            "model must serialize as its API id, got {}",
+            json
+        );
+
+        let restored: OpenAIConfig = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(
+            restored.model,
+            OpenAITranscriptionModel::Gpt4oMiniTranscribe
+        );
+        assert_eq!(restored.api_key, "sk-test");
+    }
+
+    #[test]
+    fn test_openai_model_serialization_matches_api_ids() {
+        let all = [
+            (OpenAITranscriptionModel::GptTranscribe, "gpt-transcribe"),
+            (
+                OpenAITranscriptionModel::Gpt4oTranscribe,
+                "gpt-4o-transcribe",
+            ),
+            (
+                OpenAITranscriptionModel::Gpt4oMiniTranscribe,
+                "gpt-4o-mini-transcribe",
+            ),
+            (
+                OpenAITranscriptionModel::Gpt4oTranscribeDiarize,
+                "gpt-4o-transcribe-diarize",
+            ),
+            (OpenAITranscriptionModel::Whisper1, "whisper-1"),
+        ];
+
+        for (model, api_id) in all {
+            assert_eq!(model.as_api_id(), api_id);
+
+            let json = serde_json::to_string(&model).expect("serialize");
+            assert_eq!(json, format!("\"{}\"", api_id));
+
+            let restored: OpenAITranscriptionModel =
+                serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(restored, model, "roundtrip for {}", api_id);
+        }
+    }
+
+    #[test]
+    fn test_openai_model_request_parameters() {
+        // Only whisper-1 documents a sampling temperature.
+        assert!(OpenAITranscriptionModel::Whisper1.supports_temperature());
+        for model in [
+            OpenAITranscriptionModel::GptTranscribe,
+            OpenAITranscriptionModel::Gpt4oTranscribe,
+            OpenAITranscriptionModel::Gpt4oMiniTranscribe,
+            OpenAITranscriptionModel::Gpt4oTranscribeDiarize,
+        ] {
+            assert!(
+                !model.supports_temperature(),
+                "{} must not receive temperature",
+                model.as_api_id()
+            );
+        }
+
+        // Diarization needs diarized_json plus a chunking strategy.
+        assert_eq!(
+            OpenAITranscriptionModel::Gpt4oTranscribeDiarize.response_format(),
+            "diarized_json"
+        );
+        assert!(OpenAITranscriptionModel::Gpt4oTranscribeDiarize.requires_chunking_strategy());
+
+        for model in [
+            OpenAITranscriptionModel::GptTranscribe,
+            OpenAITranscriptionModel::Gpt4oTranscribe,
+            OpenAITranscriptionModel::Gpt4oMiniTranscribe,
+            OpenAITranscriptionModel::Whisper1,
+        ] {
+            assert_eq!(model.response_format(), "json");
+            assert!(!model.requires_chunking_strategy());
         }
     }
 

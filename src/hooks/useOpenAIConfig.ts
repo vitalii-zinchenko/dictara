@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { commands, type OpenAIConfigStatus } from '@/bindings'
+import { commands, type OpenAIConfigStatus, type OpenAITranscriptionModel } from '@/bindings'
 
 export const OPENAI_CONFIG_QUERY_KEY = ['openaiConfig'] as const
 
@@ -21,11 +21,16 @@ export function useOpenAIConfig() {
 }
 
 interface SaveOpenAIConfigParams {
-  apiKey: string
+  /** Omit to keep the already-stored key (model-only update). */
+  apiKey?: string
+  model: OpenAITranscriptionModel
 }
 
 /**
  * Hook to save OpenAI configuration.
+ *
+ * Passing no `apiKey` keeps the key already in the keychain, so the model can
+ * be changed without the user re-entering it.
  * Invalidates the config query on success.
  */
 export function useSaveOpenAIConfig() {
@@ -33,7 +38,7 @@ export function useSaveOpenAIConfig() {
 
   return useMutation({
     mutationFn: async (params: SaveOpenAIConfigParams): Promise<void> => {
-      const result = await commands.saveOpenaiConfig(params.apiKey)
+      const result = await commands.saveOpenaiConfig(params.apiKey ?? null, params.model)
       if (result.status === 'error') {
         throw new Error(result.error)
       }
@@ -50,6 +55,9 @@ interface TestOpenAIConfigParams {
 
 /**
  * Hook to test OpenAI API key validity.
+ *
+ * Validates the credential only - the backend always probes with Whisper, so
+ * the result does not depend on the selected model.
  */
 export function useTestOpenAIConfig() {
   return useMutation({
